@@ -353,10 +353,18 @@ function registerSpaApiRoutes(app, deps) {
     }
 
     try {
-      await run(
+      // A blank date must leave spent_on and month_key untouched. Defaulting
+      // month_key to the current month here silently relocated edited
+      // expenses out of their original month and corrupted past totals.
+      const result = await run(
         `
           UPDATE expenses
-          SET label = ?, amount = ?, category = ?, note = ?, spent_on = ?, month_key = ?
+          SET label = ?,
+              amount = ?,
+              category = ?,
+              note = ?,
+              spent_on = COALESCE(?, spent_on),
+              month_key = COALESCE(?, month_key)
           WHERE id = ? AND user_id = ?
         `,
         [
@@ -365,11 +373,17 @@ function registerSpaApiRoutes(app, deps) {
           category,
           note || null,
           spentOn || null,
-          parseMonthFromDate(spentOn) || getCurrentMonthKey(),
+          parseMonthFromDate(spentOn) || null,
           expenseId,
           req.session.userId
         ]
       );
+
+      if (result && result.changes === 0) {
+        res.status(404).json({ message: "Expense not found." });
+        return;
+      }
+
       res.json({ ok: true });
     } catch (error) {
       res.status(500).json({ message: "Unable to update expense right now." });

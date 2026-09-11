@@ -29,7 +29,11 @@ function applyTheme(theme) {
 }
 
 function initializeTheme() {
-  const savedTheme = localStorage.getItem("budgetTheme");
+  // Deliberately NOT "budgetTheme": that key belongs to the React SPA, whose
+  // values are aurora/midnight/forest/sand. Writing "dark"/"light" into it
+  // left the SPA with an unknown theme and silently discarded the user's
+  // choice. This whole file is removed once the EJS pages stop loading it.
+  const savedTheme = localStorage.getItem("budgetAuthTheme");
   const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
   const activeTheme = savedTheme || (prefersDark ? "dark" : "light");
   applyTheme(activeTheme);
@@ -37,7 +41,7 @@ function initializeTheme() {
   const toggle = ensureThemeToggle();
   toggle.addEventListener("click", () => {
     const nextTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
-    localStorage.setItem("budgetTheme", nextTheme);
+    localStorage.setItem("budgetAuthTheme", nextTheme);
     applyTheme(nextTheme);
   });
 }

@@ -41,6 +41,9 @@ const BACKUP_INTERVAL_HOURS = Number(process.env.BACKUP_INTERVAL_HOURS || (IS_PR
 const BACKUP_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 7);
 const backupDirConfig = String(process.env.BACKUP_DIR || "backups").trim();
 const EXPENSE_CATEGORIES = ["Food", "Travel", "Bills", "Shopping", "Health", "Education", "Other"];
+const GOOGLE_AUTH_VARS = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_CALLBACK_URL"];
+const GOOGLE_AUTH_SET = GOOGLE_AUTH_VARS.filter((name) => String(process.env[name] || "").trim());
+const GOOGLE_AUTH_ENABLED = GOOGLE_AUTH_SET.length === GOOGLE_AUTH_VARS.length;
 const logsDir = path.join(__dirname, "logs");
 const reactDistDir = path.join(__dirname, "client", "dist");
 const reactIndexFile = path.join(reactDistDir, "index.html");
@@ -56,11 +59,13 @@ if (IS_PRODUCTION && !process.env.APP_BASE_URL) {
   throw new Error("APP_BASE_URL must be set in production.");
 }
 
-if (IS_PRODUCTION && GOOGLE_AUTH_ENABLED) {
-  const hasAllGoogleVars = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_CALLBACK_URL;
-  if (!hasAllGoogleVars) {
-    throw new Error("GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_CALLBACK_URL must all be set if Google Auth is enabled.");
-  }
+// A partial Google config is almost always a mistake: sign-in silently
+// disappears from the login page instead of failing. Catch it at boot.
+if (GOOGLE_AUTH_SET.length > 0 && !GOOGLE_AUTH_ENABLED) {
+  const missing = GOOGLE_AUTH_VARS.filter((name) => !GOOGLE_AUTH_SET.includes(name));
+  throw new Error(
+    `Google sign-in is partially configured. Set ${missing.join(", ")} as well, or unset ${GOOGLE_AUTH_SET.join(", ")} to disable it.`
+  );
 }
 
 if (!fs.existsSync(logsDir)) {
@@ -111,11 +116,14 @@ function resolveRedisUrl() {
 
 const RESOLVED_REDIS_URL = resolveRedisUrl();
 const USE_REDIS_SESSIONS = Boolean(RESOLVED_REDIS_URL);
-const GOOGLE_AUTH_ENABLED = Boolean(
-  process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_CALLBACK_URL
-);
 
-const dbPath = path.join(__dirname, "db", "budget.db");
+// DB_PATH lets tests and migration dry-runs point at a throwaway database.
+// Without it the test suite wrote into the live file, which is how 123 junk
+// users ended up alongside real financial records.
+const dbPathConfig = String(process.env.DB_PATH || "").trim();
+const dbPath = dbPathConfig
+  ? (path.isAbsolute(dbPathConfig) ? dbPathConfig : path.join(__dirname, dbPathConfig))
+  : path.join(__dirname, "db", "budget.db");
 const db = new sqlite3.Database(dbPath);
 
 function run(sql, params = []) {
@@ -154,6 +162,12 @@ function all(sql, params = []) {
   });
 }
 
+function closeDatabase() {
+  return new Promise((resolve) => {
+    db.close(() => resolve());
+  });
+}
+
 async function initializeDatabase() {
   await run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -163,11 +177,6 @@ async function initializeDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
-
-  await ensureUsersSchema();
-  await ensureExpensesSchema();
-  await ensureCategoryLimitsSchema();
-  await ensureRecurringExpensesSchema();
 
   await run(`
     CREATE TABLE IF NOT EXISTS monthly_budgets (
@@ -233,6 +242,16 @@ async function initializeDatabase() {
   await run(
     "CREATE INDEX IF NOT EXISTS idx_email_verification_expires_at ON email_verification_tokens(expires_at)"
   );
+
+  // Column/constraint migrations run last, once every table above exists.
+  // These previously ran first, so ensureExpensesSchema() issued ALTER TABLE
+  // against a table that had not been created yet. That made bootstrapping a
+  // fresh database impossible -- it only ever worked because db/budget.db
+  // was already present.
+  await ensureUsersSchema();
+  await ensureExpensesSchema();
+  await ensureCategoryLimitsSchema();
+  await ensureRecurringExpensesSchema();
 }
 
 async function ensureUsersSchema() {
@@ -292,22 +311,52 @@ async function ensureCategoryLimitsSchema() {
   `);
 }
 
+const RECURRING_EXPENSES_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS recurring_expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    amount REAL NOT NULL CHECK(amount > 0),
+    category TEXT NOT NULL DEFAULT 'Other',
+    note TEXT,
+    day_of_month INTEGER NOT NULL CHECK(day_of_month >= 1 AND day_of_month <= 31),
+    is_active INTEGER NOT NULL DEFAULT 1,
+    last_applied_month TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )
+`;
+
 async function ensureRecurringExpensesSchema() {
-  await run(`
-    CREATE TABLE IF NOT EXISTS recurring_expenses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      label TEXT NOT NULL,
-      amount REAL NOT NULL CHECK(amount > 0),
-      category TEXT NOT NULL DEFAULT 'Other',
-      note TEXT,
-      day_of_month INTEGER NOT NULL CHECK(day_of_month >= 1 AND day_of_month <= 28),
-      is_active INTEGER NOT NULL DEFAULT 1,
-      last_applied_month TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-  `);
+  await run(RECURRING_EXPENSES_TABLE_SQL);
+
+  // Older databases capped day_of_month at 28, while the API accepted 1-31.
+  // Days 29-31 passed validation and then failed the CHECK as an opaque 500.
+  // SQLite cannot ALTER a CHECK constraint, so widening it needs a rebuild.
+  const [tableDef] = await all(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'recurring_expenses'"
+  );
+
+  if (!tableDef || !tableDef.sql.includes("day_of_month <= 28")) {
+    return;
+  }
+
+  await run("BEGIN IMMEDIATE");
+  try {
+    await run(RECURRING_EXPENSES_TABLE_SQL.replace("IF NOT EXISTS recurring_expenses", "recurring_expenses_rebuilt"));
+    await run(`
+      INSERT INTO recurring_expenses_rebuilt
+        (id, user_id, label, amount, category, note, day_of_month, is_active, last_applied_month, created_at)
+      SELECT id, user_id, label, amount, category, note, day_of_month, is_active, last_applied_month, created_at
+      FROM recurring_expenses
+    `);
+    await run("DROP TABLE recurring_expenses");
+    await run("ALTER TABLE recurring_expenses_rebuilt RENAME TO recurring_expenses");
+    await run("COMMIT");
+  } catch (error) {
+    await run("ROLLBACK");
+    throw error;
+  }
 }
 
 function getCurrentMonthKey() {
@@ -388,6 +437,11 @@ function createDatabaseBackup() {
   }
 }
 
+// Declared here rather than beside the session-store setup below, so that
+// getHealthSnapshot() does not reference a binding defined later in the file.
+let redisClient = null;
+let sessionStore = null;
+
 function getHealthSnapshot() {
   return {
     status: "ok",
@@ -416,7 +470,11 @@ async function applyRecurringExpensesForMonth(userId, monthKey) {
       continue;
     }
 
-    const spentOn = `${monthKey}-${String(item.day_of_month).padStart(2, "0")}`;
+    // A rule set for the 31st must still fire in a 30-day month, and in
+    // February. Clamp to the last real day rather than building an
+    // impossible date like 2026-02-31.
+    const effectiveDay = Math.min(item.day_of_month, getDaysInMonthFromKey(monthKey));
+    const spentOn = `${monthKey}-${String(effectiveDay).padStart(2, "0")}`;
 
     await run(
       "INSERT INTO expenses (user_id, month_key, amount, label, category, note, spent_on) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -468,9 +526,6 @@ function getBaseUrl(req) {
 
   return `${req.protocol}://${req.get("host")}`;
 }
-
-let redisClient = null;
-let sessionStore = null;
 
 if (USE_REDIS_SESSIONS) {
   redisClient = createClient({
@@ -767,6 +822,7 @@ module.exports = {
   app,
   startServer,
   initializeDatabase,
+  closeDatabase,
   getCurrentMonthKey,
   parseMonthFromDate,
   isIsoDate,

@@ -32,6 +32,21 @@ function addMonthsToKey(monthKey, delta) {
   return `${nextYear}-${nextMonth}`;
 }
 
+const DEFAULT_THEME = "aurora";
+
+// Only ever trust a stored theme that still exists in THEMES. An unknown
+// value matches no selector in styles.css and renders the app unstyled,
+// which is what a stale "dark"/"light" value from the auth pages used to do.
+// localStorage can also throw outright in private-browsing modes.
+function readStoredTheme() {
+  try {
+    const stored = localStorage.getItem("budgetTheme");
+    return THEMES.some((option) => option.id === stored) ? stored : DEFAULT_THEME;
+  } catch {
+    return DEFAULT_THEME;
+  }
+}
+
 function metricTone(traffic) {
   if (traffic === "green") return "ok";
   if (traffic === "yellow") return "warn";
@@ -568,7 +583,7 @@ function ExpenseEditModal({ item, categories, onClose, onSave }) {
           </div>
           <div>
             <label className="modal-label">Date</label>
-            <input type="date" value={form.spentOn} onChange={(event) => setForm((prev) => ({ ...prev, spentOn: event.target.value }))} />
+            <input type="date" value={form.spentOn} onChange={(event) => setForm((prev) => ({ ...prev, spentOn: event.target.value }))} required />
           </div>
           <div>
             <label className="modal-label">Note</label>
@@ -1185,7 +1200,7 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
   }
 
   const memberDays = Math.max(1, Math.round((Date.now() - new Date(profile.joinedAt).getTime()) / (1000 * 60 * 60 * 24)));
-  const displayName = fullName || email || profile.email || "User";
+  const displayName = fullName || profile.email || "User";
   const initials = displayName
     .split(" ")
     .filter(Boolean)
@@ -1199,7 +1214,7 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
       setError("");
       await apiRequest("/api/profile", {
         method: "PATCH",
-        body: JSON.stringify({ email, fullName, avatarUrl })
+        body: JSON.stringify({ fullName, avatarUrl })
       });
       setSuccess("Name updated.");
       window.setTimeout(() => setSuccess(""), 3000);
@@ -1455,11 +1470,15 @@ function App() {
   const [session, setSession] = useState(null);
   const [csrfToken, setCsrfToken] = useState("");
   const [bootError, setBootError] = useState("");
-  const [theme, setTheme] = useState(localStorage.getItem("budgetTheme") || "aurora");
+  const [theme, setTheme] = useState(readStoredTheme);
 
   useEffect(() => {
     document.body.dataset.theme = theme;
-    localStorage.setItem("budgetTheme", theme);
+    try {
+      localStorage.setItem("budgetTheme", theme);
+    } catch {
+      // Private browsing can reject writes; the theme still applies in-session.
+    }
   }, [theme]);
 
   useEffect(() => {

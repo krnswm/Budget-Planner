@@ -1,19 +1,38 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const request = require("supertest");
 
 process.env.REDIS_URL = "";
 process.env.REDIS_AUTO_WSL = "false";
 
+// Point the app at a throwaway database BEFORE requiring it. Previously the
+// suite ran against db/budget.db, which is how 123 junk users accumulated
+// alongside real financial records.
+const testDbPath = path.join(
+  fs.mkdtempSync(path.join(os.tmpdir(), "budget-test-")),
+  "budget.db"
+);
+process.env.DB_PATH = testDbPath;
+
 const {
   app,
   initializeDatabase,
+  closeDatabase,
   getCurrentMonthKey,
   parseMonthFromDate,
   applyRecurringExpensesForMonth,
   run,
   get
 } = require("../server");
+
+test.after(async () => {
+  // Windows will not unlink a file sqlite3 still holds open.
+  await closeDatabase();
+  fs.rmSync(path.dirname(testDbPath), { recursive: true, force: true });
+});
 
 function extractCsrfToken(html) {
   const match = html.match(/name="_csrf"\s+value="([^"]+)"/);
