@@ -7,11 +7,14 @@ const money = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2
 });
 
+// Light / Dark / System replaces the previous four named palettes
+// (aurora/midnight/forest/sand), which were three light themes and one dark
+// with no way to follow the operating system. "system" writes no attribute,
+// which lets the prefers-color-scheme block in styles.css take over.
 const THEMES = [
-  { id: "aurora", label: "Aurora" },
-  { id: "midnight", label: "Midnight" },
-  { id: "forest", label: "Forest" },
-  { id: "sand", label: "Sand" }
+  { id: "system", label: "Match system" },
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" }
 ];
 
 const NAV_ITEMS = [
@@ -32,7 +35,7 @@ function addMonthsToKey(monthKey, delta) {
   return `${nextYear}-${nextMonth}`;
 }
 
-const DEFAULT_THEME = "aurora";
+const DEFAULT_THEME = "system";
 
 // Only ever trust a stored theme that still exists in THEMES. An unknown
 // value matches no selector in styles.css and renders the app unstyled,
@@ -47,12 +50,22 @@ function readStoredTheme() {
   }
 }
 
+// Maps the server's trafficLight to the design tokens. Names describe the
+// budget state rather than a colour, so the meaning survives a palette change.
 function metricTone(traffic) {
-  if (traffic === "green") return "ok";
-  if (traffic === "yellow") return "warn";
-  if (traffic === "red") return "danger";
+  if (traffic === "green") return "under";
+  if (traffic === "yellow") return "near";
+  if (traffic === "red") return "over";
   return "calm";
 }
+
+// Colour alone is not a sufficient signal, so every tone carries a word.
+const STATUS_LABEL = {
+  under: "On track",
+  near: "Getting tight",
+  over: "Over budget",
+  calm: "No budget set"
+};
 
 async function parseResponse(response) {
   const payload = await response.json().catch(() => ({}));
@@ -142,10 +155,12 @@ function AppShell({
 
   return (
     <div className="spa-shell">
+      <a className="skip-link" href="#main">Skip to main content</a>
+
       <header className="spa-topbar">
         <div className="topbar-minimal">
           <p className="eyebrow">Budget Planner</p>
-          <h1>{session && session.userName ? `${session.userName}'s Workspace` : "Personal Finance Workspace"}</h1>
+          <h1>{session && session.userName ? `${session.userName}'s workspace` : "Personal finance workspace"}</h1>
         </div>
 
         <div className="profile-corner" ref={profileMenuRef}>
@@ -154,41 +169,51 @@ function AppShell({
             className="profile-trigger"
             aria-expanded={profileMenuOpen}
             aria-haspopup="menu"
+            aria-label={`Account menu for ${session.userName || "your account"}`}
             onClick={() => setProfileMenuOpen((prev) => !prev)}
           >
             {headerAvatar ? (
-              <img className="avatar avatar-photo avatar-photo-sm" src={headerAvatar} alt={session.userName || "Profile"} />
+              <img className="avatar avatar-photo avatar-photo-sm" src={headerAvatar} alt="" />
             ) : (
-              <div className="avatar avatar-sm">{initials || "U"}</div>
+              <div className="avatar avatar-sm" aria-hidden="true">{initials || "U"}</div>
             )}
-            <div className="profile-corner-meta">
+            <span className="profile-corner-meta">
               <strong>{session.userName}</strong>
-              <p className="subtext">Profile</p>
-            </div>
-            <span className="caret">v</span>
+              <span className="subtext">Account</span>
+            </span>
+            {/* Drawn in CSS. This was the literal letter "v", which screen
+                readers announced as part of the button's name. */}
+            <span className="caret" aria-hidden="true" />
           </button>
           {profileMenuOpen ? (
             <div className="profile-dropdown" role="menu">
-              <Link className="dropdown-item" to="/profile" onClick={() => setProfileMenuOpen(false)}>Account settings</Link>
-              <Link className="dropdown-item" to="/budget" onClick={() => setProfileMenuOpen(false)}>Set Monthly Budget</Link>
-              <Link className="dropdown-item" to="/months" onClick={() => setProfileMenuOpen(false)}>Recent Months</Link>
-              <button className="dropdown-item-btn" onClick={onLogout} type="button">Log out</button>
+              <Link role="menuitem" className="dropdown-item" to="/profile" onClick={() => setProfileMenuOpen(false)}>Account settings</Link>
+              <Link role="menuitem" className="dropdown-item" to="/budget" onClick={() => setProfileMenuOpen(false)}>Set monthly budget</Link>
+              <Link role="menuitem" className="dropdown-item" to="/months" onClick={() => setProfileMenuOpen(false)}>Recent months</Link>
+              <div className="dropdown-sep" role="separator" />
+              <button role="menuitem" className="dropdown-item-btn" onClick={onLogout} type="button">Log out</button>
             </div>
           ) : null}
         </div>
       </header>
 
-      <nav className="spa-nav minimal" aria-label="Primary">
+      <nav className="spa-nav" aria-label="Primary">
         {NAV_ITEMS.map((item) => (
-          <NavLink key={item.to} to={item.to} title={item.label}>
-            <span className="nav-label">{item.label}</span>
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) => (isActive ? "active" : undefined)}
+          >
+            {item.label}
           </NavLink>
         ))}
       </nav>
 
-      {globalError ? <div className="alert">{globalError}</div> : null}
+      {/* role="alert" so the message is announced. It auto-dismisses after
+          3s, so a silent banner is invisible to a screen-reader user. */}
+      {globalError ? <div className="alert" role="alert">{globalError}</div> : null}
 
-      <div className="route-frame" key={location.pathname}>
+      <main id="main" className="route-frame" key={location.pathname}>
         <Routes location={location}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage apiRequest={apiRequest} />} />
@@ -210,7 +235,7 @@ function AppShell({
           />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
-      </div>
+      </main>
     </div>
   );
 }
@@ -251,25 +276,48 @@ function DashboardPage({ apiRequest }) {
       const previousMonthKey = monthKey ? addMonthsToKey(monthKey, -1) : "";
       const nextMonthKey = monthKey ? addMonthsToKey(monthKey, 1) : "";
 
+      const tone = metricTone(data.trafficLight);
+
       return (
-        <main className="grid dashboard-layout">
-          <section className="card card-wide dashboard-main-card">
+        <div className="grid dashboard-layout">
+          <section className="card dashboard-hero" aria-labelledby="hero-heading">
             <div className="section-head">
-              <h2>{data.currentMonthLabel}</h2>
+              <h2 id="hero-heading">{data.currentMonthLabel}</h2>
               <div className="month-nav-actions">
-                <button type="button" className="btn-ghost" onClick={() => setMonthKey(previousMonthKey)} disabled={monthLoading}>Prev</button>
-                <button type="button" className="btn-ghost" onClick={() => setMonthKey(nextMonthKey)} disabled={monthLoading || monthKey === todayMonthKey}>Next</button>
+                <button type="button" className="btn-ghost" onClick={() => setMonthKey(previousMonthKey)} disabled={monthLoading} aria-label="Previous month">&#8592;</button>
+                <button type="button" className="btn-ghost" onClick={() => setMonthKey(nextMonthKey)} disabled={monthLoading || monthKey === todayMonthKey} aria-label="Next month">&#8594;</button>
               </div>
             </div>
-            <p className={`balance metric-${metricTone(data.trafficLight)}`}>{money.format(data.remaining || 0)}</p>
-            <div className="meter"><div className="meter-fill" style={{ width: `${percentSpent}%` }} /></div>
+
+            <div className="hero-figure">
+              <span className="metric-label">Remaining to spend</span>
+              <p className={`balance metric-${tone}`}>{money.format(data.remaining || 0)}</p>
+              {/* The status word travels with the colour. A green/amber/red
+                  bar alone is invisible to anyone who cannot distinguish
+                  those hues, and disappears entirely in greyscale. */}
+              <span className={`status-pill status-${tone}`}>{STATUS_LABEL[tone]}</span>
+            </div>
+
+            <div
+              className={`meter meter-${tone}`}
+              role="progressbar"
+              aria-valuenow={Math.round(percentSpent)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`${Math.round(percentSpent)}% of budget spent`}
+            >
+              <div className="meter-fill" style={{ width: `${percentSpent}%` }} />
+            </div>
+
+            {data.paceMessage ? <p className="subtext">{data.paceMessage}</p> : null}
+
             <div className="metrics-display">
               <div className="metric-item">
-                <label>Spent</label>
+                <span className="metric-label">Spent</span>
                 <strong>{money.format(data.spent || 0)}</strong>
               </div>
               <div className="metric-item">
-                <label>Total Budget</label>
+                <span className="metric-label">Total Budget</span>
                 <strong>{money.format(data.totalBudget || 0)}</strong>
               </div>
             </div>
@@ -318,19 +366,19 @@ function DashboardPage({ apiRequest }) {
                   await load(monthKey);
                 }}
               >
-                <input type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="Amount" required />
-                <input type="text" value={expenseForm.label} onChange={(event) => setExpenseForm((prev) => ({ ...prev, label: event.target.value }))} placeholder="Label" required />
-                <select value={expenseForm.category} onChange={(event) => setExpenseForm((prev) => ({ ...prev, category: event.target.value }))}>
+                <input type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="Amount" aria-label="Amount" inputMode="decimal" required />
+                <input type="text" value={expenseForm.label} onChange={(event) => setExpenseForm((prev) => ({ ...prev, label: event.target.value }))} placeholder="Label" aria-label="Label" required />
+                <select aria-label="Category" value={expenseForm.category} onChange={(event) => setExpenseForm((prev) => ({ ...prev, category: event.target.value }))}>
                   {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
                 </select>
-                <input type="date" value={expenseForm.spentOn} onChange={(event) => setExpenseForm((prev) => ({ ...prev, spentOn: event.target.value }))} required />
-                <input type="text" value={expenseForm.note} onChange={(event) => setExpenseForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="Note" />
+                <input type="date" aria-label="Date of expense" value={expenseForm.spentOn} onChange={(event) => setExpenseForm((prev) => ({ ...prev, spentOn: event.target.value }))} required />
+                <input type="text" value={expenseForm.note} onChange={(event) => setExpenseForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="Note" aria-label="Note (optional)" />
                 <button type="submit">Add Expense</button>
               </form>
             </div>
           </section>
 
-        </main>
+        </div>
       );
 }
 
@@ -351,7 +399,7 @@ function BudgetPage({ apiRequest }) {
   }
 
   return (
-    <main className="grid">
+    <div className="grid">
       <section className="card card-wide">
         <h2>Set Monthly Budget</h2>
         <p className="subtext">{data.currentMonthLabel}</p>
@@ -366,11 +414,11 @@ function BudgetPage({ apiRequest }) {
             await load();
           }}
         >
-          <input type="number" min="1" step="0.01" value={budgetInput} onChange={(event) => setBudgetInput(event.target.value)} required />
+          <input id="budget-amount" type="number" min="1" step="0.01" inputMode="decimal" value={budgetInput} onChange={(event) => setBudgetInput(event.target.value)} required />
           <button type="submit">Save Budget</button>
         </form>
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -389,7 +437,7 @@ function RecentMonthsPage({ apiRequest }) {
   }
 
   return (
-    <main className="grid">
+    <div className="grid">
       <section className="card card-wide">
         <h2>Recent Months</h2>
         {data.history.length === 0 ? <p className="subtext">No history yet.</p> : (
@@ -407,7 +455,7 @@ function RecentMonthsPage({ apiRequest }) {
           </ul>
         )}
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -430,20 +478,20 @@ function ExpensesPage({ apiRequest }) {
   }
 
   return (
-    <main className="grid">
+    <div className="grid">
       <section className="card card-wide">
         <h2>{data.currentMonthLabel} Expenses</h2>
         <div className="metrics-display">
           <div className="metric-item">
-            <label>Total Budget</label>
+            <span className="metric-label">Total Budget</span>
             <strong>{money.format(data.totalBudget)}</strong>
           </div>
           <div className="metric-item">
-            <label>Spent</label>
+            <span className="metric-label">Spent</span>
             <strong>{money.format(data.spent)}</strong>
           </div>
           <div className="metric-item">
-            <label>Remaining</label>
+            <span className="metric-label">Remaining</span>
             <strong>{money.format(data.remaining)}</strong>
           </div>
         </div>
@@ -457,13 +505,13 @@ function ExpensesPage({ apiRequest }) {
             load(filters);
           }}
         >
-          <input placeholder="Search label" value={filters.label} onChange={(event) => setFilters((prev) => ({ ...prev, label: event.target.value }))} />
-          <select value={filters.category} onChange={(event) => setFilters((prev) => ({ ...prev, category: event.target.value }))}>
+          <input aria-label="Search by label" placeholder="Search label" value={filters.label} onChange={(event) => setFilters((prev) => ({ ...prev, label: event.target.value }))} />
+          <select aria-label="Filter by category" value={filters.category} onChange={(event) => setFilters((prev) => ({ ...prev, category: event.target.value }))}>
             <option value="">All Categories</option>
             {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
           </select>
-          <input type="date" value={filters.startDate} onChange={(event) => setFilters((prev) => ({ ...prev, startDate: event.target.value }))} />
-          <input type="date" value={filters.endDate} onChange={(event) => setFilters((prev) => ({ ...prev, endDate: event.target.value }))} />
+          <input type="date" aria-label="Filter from date" value={filters.startDate} onChange={(event) => setFilters((prev) => ({ ...prev, startDate: event.target.value }))} />
+          <input type="date" aria-label="Filter to date" value={filters.endDate} onChange={(event) => setFilters((prev) => ({ ...prev, endDate: event.target.value }))} />
           <button type="submit">Apply</button>
           <button type="button" className="btn-ghost" onClick={() => load({ label: "", category: "", startDate: "", endDate: "" })}>Clear</button>
         </form>
@@ -511,7 +559,7 @@ function ExpensesPage({ apiRequest }) {
           }}
         />
       )}
-    </main>
+    </div>
   );
 }
 
@@ -549,13 +597,15 @@ function ExpenseEditModal({ item, categories, onClose, onSave }) {
 
   return (
     <div className="modal-backdrop" ref={modalRef}>
-      <div className="modal-window">
+      <div className="modal-window" role="dialog" aria-modal="true" aria-labelledby="edit-expense-title">
         <div className="modal-header">
-          <h2>Edit Expense</h2>
-          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Close modal">×</button>
+          <h2 id="edit-expense-title">Edit expense</h2>
+          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Close dialog">
+            <span aria-hidden="true">&times;</span>
+          </button>
         </div>
         <form
-          className="modal-body stack"
+          className="modal-body"
           onSubmit={(event) => {
             event.preventDefault();
             onSave({
@@ -567,31 +617,35 @@ function ExpenseEditModal({ item, categories, onClose, onSave }) {
             });
           }}
         >
-          <div>
-            <label className="modal-label">Label</label>
-            <input value={form.label} onChange={(event) => setForm((prev) => ({ ...prev, label: event.target.value }))} required />
+          {/* htmlFor/id on every field. Previously these labels were plain
+              siblings of their inputs, so clicking one did nothing and screen
+              readers gave the control no name at all. */}
+          <div className="field field-full">
+            <label htmlFor="edit-label">Label</label>
+            <input id="edit-label" value={form.label} onChange={(event) => setForm((prev) => ({ ...prev, label: event.target.value }))} required />
           </div>
-          <div>
-            <label className="modal-label">Amount</label>
-            <input type="number" min="0.01" step="0.01" value={form.amount} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} required />
+          <div className="field">
+            <label htmlFor="edit-amount">Amount</label>
+            <input id="edit-amount" type="number" min="0.01" step="0.01" inputMode="decimal" value={form.amount} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} required />
           </div>
-          <div>
-            <label className="modal-label">Category</label>
-            <select value={form.category} onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))}>
+          <div className="field">
+            <label htmlFor="edit-category">Category</label>
+            <select id="edit-category" value={form.category} onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))}>
               {categories.map((category) => <option key={category} value={category}>{category}</option>)}
             </select>
           </div>
-          <div>
-            <label className="modal-label">Date</label>
-            <input type="date" value={form.spentOn} onChange={(event) => setForm((prev) => ({ ...prev, spentOn: event.target.value }))} required />
+          <div className="field field-full">
+            <label htmlFor="edit-date">Date</label>
+            <input id="edit-date" type="date" value={form.spentOn} onChange={(event) => setForm((prev) => ({ ...prev, spentOn: event.target.value }))} required aria-describedby="edit-date-hint" />
+            <p className="field-hint" id="edit-date-hint">Changing this moves the expense to that month.</p>
           </div>
-          <div>
-            <label className="modal-label">Note</label>
-            <input value={form.note} onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="Optional note" />
+          <div className="field field-full">
+            <label htmlFor="edit-note">Note</label>
+            <input id="edit-note" value={form.note} onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="Optional" />
           </div>
-          <div className="modal-footer">
+          <div className="modal-footer field-full">
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit">Save Changes</button>
+            <button type="submit">Save changes</button>
           </div>
         </form>
       </div>
@@ -621,7 +675,7 @@ function PlanningPage({ apiRequest }) {
   }
 
   return (
-    <main className="grid">
+    <div className="grid">
       <section className="card">
         <h2>Category Limits</h2>
         <form
@@ -636,10 +690,10 @@ function PlanningPage({ apiRequest }) {
             await load();
           }}
         >
-          <select value={limitForm.category} onChange={(event) => setLimitForm((prev) => ({ ...prev, category: event.target.value }))}>
+          <select aria-label="Category for limit" value={limitForm.category} onChange={(event) => setLimitForm((prev) => ({ ...prev, category: event.target.value }))}>
             {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
           </select>
-          <input type="number" min="1" step="0.01" value={limitForm.limitAmount} onChange={(event) => setLimitForm((prev) => ({ ...prev, limitAmount: event.target.value }))} placeholder="Limit" required />
+          <input type="number" min="1" step="0.01" value={limitForm.limitAmount} onChange={(event) => setLimitForm((prev) => ({ ...prev, limitAmount: event.target.value }))} placeholder="Limit amount" aria-label="Limit amount" inputMode="decimal" required />
           <button type="submit">Save Limit</button>
         </form>
         <div className="planning-lists">
@@ -730,13 +784,13 @@ function PlanningPage({ apiRequest }) {
             await load();
           }}
         >
-          <input value={recurringForm.label} onChange={(event) => setRecurringForm((prev) => ({ ...prev, label: event.target.value }))} placeholder="Label" required />
-          <input type="number" min="0.01" step="0.01" value={recurringForm.amount} onChange={(event) => setRecurringForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="Amount" required />
+          <input value={recurringForm.label} onChange={(event) => setRecurringForm((prev) => ({ ...prev, label: event.target.value }))} placeholder="Label" aria-label="Label" required />
+          <input type="number" min="0.01" step="0.01" value={recurringForm.amount} onChange={(event) => setRecurringForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="Amount" aria-label="Amount" inputMode="decimal" required />
           <select value={recurringForm.category} onChange={(event) => setRecurringForm((prev) => ({ ...prev, category: event.target.value }))}>
             {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
           </select>
           <input type="number" min="1" max="31" value={recurringForm.dayOfMonth} onChange={(event) => setRecurringForm((prev) => ({ ...prev, dayOfMonth: event.target.value }))} placeholder="Day of month" required />
-          <input value={recurringForm.note} onChange={(event) => setRecurringForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="Note" />
+          <input value={recurringForm.note} onChange={(event) => setRecurringForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="Note" aria-label="Note (optional)" />
           <button type="submit">Add Recurring</button>
         </form>
       </section>
@@ -795,7 +849,7 @@ function PlanningPage({ apiRequest }) {
           </ul>
         )}
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -830,7 +884,7 @@ function RecurringEditInline({ item, categories, onCancel, onSave }) {
         {categories.map((category) => <option key={category} value={category}>{category}</option>)}
       </select>
       <input type="number" min="1" max="31" value={form.dayOfMonth} onChange={(event) => setForm((prev) => ({ ...prev, dayOfMonth: event.target.value }))} required />
-      <input value={form.note} onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="Note" />
+      <input value={form.note} onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="Note" aria-label="Note (optional)" />
       <label>
         Status
         <select value={form.isActive ? "active" : "paused"} onChange={(event) => setForm((prev) => ({ ...prev, isActive: event.target.value === "active" }))}>
@@ -870,24 +924,24 @@ function InsightsPage({ apiRequest }) {
   }
 
   return (
-    <main className="grid">
+    <div className="grid">
       <section className="card card-wide">
         <h2>{data.currentMonthLabel} Action Snapshot</h2>
         <div className="metrics-display">
           <div className="metric-item">
-            <label>Total Budget</label>
+            <span className="metric-label">Total Budget</span>
             <strong>{money.format(data.totalBudget)}</strong>
           </div>
           <div className="metric-item">
-            <label>Spent</label>
+            <span className="metric-label">Spent</span>
             <strong>{money.format(data.spent)}</strong>
           </div>
           <div className="metric-item">
-            <label>Remaining</label>
+            <span className="metric-label">Remaining</span>
             <strong>{money.format(data.remaining)}</strong>
           </div>
           <div className="metric-item">
-            <label>Avg/Day</label>
+            <span className="metric-label">Avg/Day</span>
             <strong>{money.format(data.avgPerDay || 0)}</strong>
           </div>
         </div>
@@ -960,7 +1014,7 @@ function InsightsPage({ apiRequest }) {
           </ul>
         )}
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -991,7 +1045,7 @@ function ReportsPage({ apiRequest }) {
   }
 
   return (
-    <main className="grid">
+    <div className="grid">
       <section className="card card-wide">
         <h2>Report Controls</h2>
         <form
@@ -1001,8 +1055,8 @@ function ReportsPage({ apiRequest }) {
             load(startDate, endDate);
           }}
         >
-          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
-          <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} required />
+          <input type="date" aria-label="Report start date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
+          <input type="date" aria-label="Report end date" value={endDate} onChange={(event) => setEndDate(event.target.value)} required />
           <button type="submit">Apply</button>
           <a className="btn-ghost btn-link" href={`/reports/monthly.csv?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`}>CSV</a>
           <a className="btn-ghost btn-link" href={`/reports/monthly.pdf?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`}>PDF</a>
@@ -1014,19 +1068,19 @@ function ReportsPage({ apiRequest }) {
         <h2>Summary</h2>
         <div className="metrics-display">
           <div className="metric-item">
-            <label>Total Spent</label>
+            <span className="metric-label">Total Spent</span>
             <strong>{money.format(data.spent)}</strong>
           </div>
           <div className="metric-item">
-            <label>Transactions</label>
+            <span className="metric-label">Transactions</span>
             <strong>{data.expenseCount}</strong>
           </div>
           <div className="metric-item">
-            <label>Average</label>
+            <span className="metric-label">Average</span>
             <strong>{money.format(data.averageExpense || 0)}</strong>
           </div>
           <div className="metric-item">
-            <label>Highest Day</label>
+            <span className="metric-label">Highest Day</span>
             <strong>{data.topDay ? `${data.topDay.day} (${money.format(data.topDay.total)})` : "-"}</strong>
           </div>
         </div>
@@ -1077,7 +1131,7 @@ function ReportsPage({ apiRequest }) {
           </ul>
         )}
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -1228,7 +1282,7 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
   }
 
   return (
-    <main className="grid profile-layout">
+    <div className="grid profile-layout">
       <section className="card profile-card">
         <div className="profile-head profile-head-compact">
           <div className="profile-avatar-wrap" ref={avatarMenuRef}>
@@ -1393,14 +1447,14 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
               type="password"
               value={passwordForm.currentPassword}
               onChange={(event) => setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))}
-              placeholder="Current password"
+              placeholder="Current password" aria-label="Current password" autoComplete="current-password"
               required
             />
             <input
               type="password"
               value={passwordForm.newPassword}
               onChange={(event) => setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
-              placeholder="New password"
+              placeholder="New password" aria-label="New password" autoComplete="new-password"
               required
             />
           </div>
@@ -1457,11 +1511,11 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
             window.location.assign("/register");
           }}
         >
-          <input value={deleteText} onChange={(event) => setDeleteText(event.target.value)} required />
+          <input id="delete-confirm" aria-label="Type DELETE to confirm" placeholder="DELETE" value={deleteText} onChange={(event) => setDeleteText(event.target.value)} required />
           <button type="submit" className="danger">Delete Account</button>
         </form>
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -1473,7 +1527,13 @@ function App() {
   const [theme, setTheme] = useState(readStoredTheme);
 
   useEffect(() => {
-    document.body.dataset.theme = theme;
+    // On <html>, not <body>: the prefers-color-scheme fallback in styles.css
+    // keys off :root:not([data-theme="light"]).
+    if (theme === "system") {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = theme;
+    }
     try {
       localStorage.setItem("budgetTheme", theme);
     } catch {
