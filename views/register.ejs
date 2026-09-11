@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Register | Budget Planner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=Manrope:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="auth-page">
+    <main class="auth-shell">
+      <section class="auth-card">
+        <p class="eyebrow">Budget Planner</p>
+        <h1>Create account</h1>
+        <p class="subtext">Start your monthly money tracker in 30 seconds.</p>
+
+        <% if (error) { %>
+          <div class="error"><%= error %></div>
+        <% } %>
+
+        <a class="btn-google" href="/auth/google">Sign up with Google</a>
+        <% if (!googleAuthEnabled) { %>
+          <p class="setup-hint">Google sign-in needs setup in .env (client ID, secret, callback URL).</p>
+        <% } %>
+        <p class="auth-divider">or create account with email</p>
+
+        <form method="POST" action="/register" class="form-stack">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <label>
+            Full Name
+            <input type="text" name="fullName" maxlength="80" value="<%= fullName || '' %>" />
+          </label>
+          <label>
+            Email
+            <input type="email" name="email" required value="<%= email %>" />
+          </label>
+          <label>
+            Password
+            <input type="password" name="password" minlength="6" required />
+          </label>
+          <button type="submit" class="btn-primary">Create account</button>
+        </form>
+
+        <p class="auth-switch">
+          Already have an account?
+          <a href="/login">Log in</a>
+        </p>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

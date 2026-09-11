@@ -1,0 +1,36 @@
+# ---- Secrets -------------------------------------------------------------
+# Real credentials live here. Only the *.example files may be committed.
+.env
+.env.*
+!.env.example
+!.env.development.example
+!.env.production.example
+
+# ---- Data ----------------------------------------------------------------
+# SQLite databases hold real financial records. Never commit them.
+db/*.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+db/*.sqlite
+backups/
+dump.rdb
+
+# ---- Build output --------------------------------------------------------
+node_modules/
+client/node_modules/
+client/dist/
+
+# ---- Runtime -------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+.vercel/
+
+# ---- OS / editor ---------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
