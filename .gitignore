@@ -32,3 +32,6 @@ desktop.ini
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Local design-review screenshots
+.screenshots/

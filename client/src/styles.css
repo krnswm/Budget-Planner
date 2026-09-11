@@ -25,29 +25,32 @@
 /* ---------------------------------------------------------------- tokens -- */
 
 :root {
-  /* Surfaces */
-  --bg: #FAFAF9;
+  /* Surfaces — cool neutral. The earlier warm stone ground read yellowish
+     next to the gold accent and cheapened the whole screen. */
+  --bg: #FAFAFA;
   --surface: #FFFFFF;
-  --surface-sunken: #F5F5F4;
-  --surface-hover: #F5F5F4;
+  --surface-sunken: #F4F4F5;
+  --surface-hover: #F4F4F5;
 
   /* Text — all verified >= 4.5:1 on both --bg and --surface */
-  --text: #0C0A09;           /* 18.92:1 */
-  --text-muted: #57534E;     /* 7.30:1  */
-  --text-subtle: #78716C;    /* 4.59:1  */
+  --text: #18181B;           /* 16.97:1 */
+  --text-muted: #52525B;     /* 7.41:1  */
+  --text-subtle: #71717A;    /* 4.63:1  */
 
-  /* Brand */
-  --primary: #1C1917;
-  --primary-hover: #292524;
-  --on-primary: #FFFFFF;     /* 17.49:1 */
-  --accent: #A16207;         /* 4.71:1 as text, 4.92:1 as fill w/ white */
-  --accent-hover: #854D0E;
-  --on-accent: #FFFFFF;
+  /* Brand. "Monochrome + blue accent": near-black carries the weight and
+     blue appears only on links and focus, never on large surfaces. The gold
+     it replaces read as a warning colour at display size. */
+  --primary: #18181B;
+  --primary-hover: #27272A;
+  --on-primary: #FFFFFF;     /* 17.72:1 */
+  --accent: #2563EB;         /* 4.95:1 as link text */
+  --accent-hover: #1D4ED8;
+  --on-accent: #FFFFFF;      /* 5.17:1 */
 
   /* Lines. --border is decorative; --border-interactive meets 3:1 and is
-     required on anything a person can operate. */
-  --border: #E7E5E4;
-  --border-interactive: #78716C;
+     required on anything a person can operate (zinc-400 is only 2.46:1). */
+  --border: #E4E4E7;
+  --border-interactive: #71717A;
 
   /* Status. Paired with a text label everywhere — colour alone is not a
      sufficient signal (chart guidance: "red/yellow/green alone is
@@ -79,9 +82,9 @@
   --r-full: 999px;
 
   /* Elevation — minimal by design; hierarchy comes from space and line */
-  --shadow-sm: 0 1px 2px rgba(12, 10, 9, 0.04);
-  --shadow-md: 0 4px 12px rgba(12, 10, 9, 0.06);
-  --shadow-lg: 0 12px 32px rgba(12, 10, 9, 0.10);
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05);
+  --shadow-md: 0 4px 12px rgba(24, 24, 27, 0.07);
+  --shadow-lg: 0 12px 32px rgba(24, 24, 27, 0.12);
 
   /* Motion — dial set to 3/10 (Subtle). One duration for everything is an
      anti-pattern, so exits are faster than entrances. */
@@ -100,24 +103,24 @@
    below can use :root:not([data-theme="light"]) — a body-level attribute
    would never match that selector. */
 :root[data-theme="dark"] {
-  --bg: #0C0A09;
-  --surface: #1C1917;
-  --surface-sunken: #171412;
-  --surface-hover: #292524;
+  --bg: #09090B;
+  --surface: #18181B;
+  --surface-sunken: #131316;
+  --surface-hover: #27272A;
 
-  --text: #FAFAF9;           /* 18.92:1 */
-  --text-muted: #D6D3D1;
-  --text-subtle: #A8A29E;    /* 7.83:1 */
+  --text: #FAFAFA;           /* 19.06:1 */
+  --text-muted: #D4D4D8;     /* 13.46:1 */
+  --text-subtle: #A1A1AA;    /* 7.76:1  */
 
-  --primary: #FAFAF9;
-  --primary-hover: #E7E5E4;
-  --on-primary: #0C0A09;
-  --accent: #F59E0B;         /* 9.20:1 — gold is too dark to read here */
-  --accent-hover: #FBBF24;
-  --on-accent: #0C0A09;
+  --primary: #FAFAFA;
+  --primary-hover: #E4E4E7;
+  --on-primary: #09090B;
+  --accent: #60A5FA;         /* 7.83:1 — blue-600 is too dark on this ground */
+  --accent-hover: #93C5FD;
+  --on-accent: #09090B;
 
-  --border: #292524;
-  --border-interactive: #78716C;   /* 4.12:1, clears the 3:1 floor */
+  --border: #27272A;
+  --border-interactive: #71717A;   /* 4.12:1, clears the 3:1 floor */
 
   --under: #34D399;          /* 10.28:1 */
   --near: #FBBF24;           /* 11.83:1 */
@@ -141,21 +144,21 @@
    setting buried in Profile. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0C0A09;
-    --surface: #1C1917;
-    --surface-sunken: #171412;
-    --surface-hover: #292524;
-    --text: #FAFAF9;
-    --text-muted: #D6D3D1;
-    --text-subtle: #A8A29E;
-    --primary: #FAFAF9;
-    --primary-hover: #E7E5E4;
-    --on-primary: #0C0A09;
-    --accent: #F59E0B;
-    --accent-hover: #FBBF24;
-    --on-accent: #0C0A09;
-    --border: #292524;
-    --border-interactive: #78716C;
+    --bg: #09090B;
+    --surface: #18181B;
+    --surface-sunken: #131316;
+    --surface-hover: #27272A;
+    --text: #FAFAFA;
+    --text-muted: #D4D4D8;
+    --text-subtle: #A1A1AA;
+    --primary: #FAFAFA;
+    --primary-hover: #E4E4E7;
+    --on-primary: #09090B;
+    --accent: #60A5FA;
+    --accent-hover: #93C5FD;
+    --on-accent: #09090B;
+    --border: #27272A;
+    --border-interactive: #71717A;
     --under: #34D399;
     --near: #FBBF24;
     --over: #F87171;
@@ -315,12 +318,18 @@ img { max-width: 100%; display: block; }
 
 /* Primary nav. Was a row of plain links; now a segmented control so the
    current section is unambiguous. */
-.spa-nav {
-  display: flex;
-  gap: var(--s-1);
+/* Wrapper holds the shell's max-width so the pill lines up with the left
+   edge of the cards; the pill itself is only as wide as its items. */
+.nav-wrap {
   max-width: var(--shell-max);
   width: 100%;
-  margin: var(--s-5) auto var(--s-5);
+  margin: var(--s-5) auto;
+}
+
+.spa-nav {
+  display: inline-flex;
+  gap: var(--s-1);
+  max-width: 100%;
   padding: var(--s-1);
   background: var(--surface-sunken);
   border: 1px solid var(--border);
@@ -332,8 +341,10 @@ img { max-width: 100%; display: block; }
 .spa-nav::-webkit-scrollbar { display: none; }
 
 .spa-nav a {
-  flex: 1 1 auto;
-  min-height: 44px;              /* touch target floor */
+  /* Sized to their label rather than stretched across the full width. Five
+     items spread over 1180px put huge gaps between related controls. */
+  flex: 0 0 auto;
+  min-height: 40px;              /* touch target floor */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -369,9 +380,16 @@ img { max-width: 100%; display: block; }
 
 /* ------------------------------------------------------------------ grid -- */
 
+/* Cards size to their own content. Stretching them to match the tallest in
+   the row padded short cards out with large empty voids, which looked worse
+   than a ragged bottom edge. The actual disorganisation was columns not
+   summing to 12, leaving whole empty columns — fixed per page below. */
+/* minmax(0, 1fr), not 1fr. A bare 1fr is minmax(auto, 1fr), so a track will
+   not shrink below its content's min-content width — long labels then forced
+   the whole grid wider than the viewport and the page scrolled sideways. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: var(--s-4);
   align-items: start;
 }
@@ -422,10 +440,14 @@ img { max-width: 100%; display: block; }
   line-height: 1.05;
 }
 
-.metric-under { color: var(--under); }
-.metric-near  { color: var(--near); }
-.metric-over  { color: var(--over); }
-.metric-calm  { color: var(--text); }
+/* The headline figure stays near-black in every state. Rendering a large
+   number in amber or red turns the whole screen into a warning and reads as
+   an error rather than information; the status pill and meter carry the
+   state instead. Only a genuinely negative balance takes the alert colour. */
+.metric-under,
+.metric-near,
+.metric-calm { color: var(--text); }
+.metric-over { color: var(--over); }
 
 .metrics-display {
   display: grid;
@@ -482,9 +504,12 @@ img { max-width: 100%; display: block; }
 
 /* ----------------------------------------------------------------- meter -- */
 
+/* Thin and near-neutral. At 8px in saturated amber this was the loudest
+   element on the page and made an ordinary month look like an emergency.
+   The fill stays near-black until the budget is actually exceeded. */
 .meter {
-  height: 8px;
-  background: var(--surface-sunken);
+  height: 4px;
+  background: var(--border);
   border-radius: var(--r-full);
   overflow: hidden;
 }
@@ -496,9 +521,10 @@ img { max-width: 100%; display: block; }
   transition: width var(--t-slow) var(--ease), background var(--t-base) var(--ease);
 }
 
-.meter-under .meter-fill { background: var(--under); }
-.meter-near  .meter-fill { background: var(--near); }
-.meter-over  .meter-fill { background: var(--over); }
+.meter-under .meter-fill,
+.meter-near .meter-fill,
+.meter-calm .meter-fill { background: var(--text); }
+.meter-over .meter-fill { background: var(--over); }
 
 /* --------------------------------------------------------------- buttons -- */
 
@@ -514,8 +540,12 @@ button:disabled,
   opacity: 0.55;
 }
 
-/* Default = primary action */
-button:not(.btn-ghost):not(.btn-link):not(.dropdown-item-btn):not(.profile-name-edit-btn):not(.avatar-hover-button),
+/* Primary action.
+   Opted IN by submit-type or .btn-primary, rather than opted out via a chain
+   of :not(). That chain was fragile and already wrong: it did not exclude
+   .profile-trigger, so the account control in the header rendered as a solid
+   black slab. Every primary action in this app is a submit button. */
+button[type="submit"],
 .btn-primary {
   min-height: 44px;
   display: inline-flex;
@@ -532,11 +562,19 @@ button:not(.btn-ghost):not(.btn-link):not(.dropdown-item-btn):not(.profile-name-
   transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
 
-button:not(.btn-ghost):not(.btn-link):not(.dropdown-item-btn):not(.profile-name-edit-btn):not(.avatar-hover-button):hover:not(:disabled),
+button[type="submit"]:hover:not(:disabled),
 .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
 
-button:not(.btn-ghost):not(.btn-link):not(.dropdown-item-btn):not(.avatar-hover-button):active:not(:disabled) {
-  transform: translateY(1px);
+button[type="submit"]:active:not(:disabled),
+.btn-primary:active:not(:disabled) { transform: translateY(1px); }
+
+/* Anything else gets a neutral reset, so an unclassed button never
+   accidentally inherits the primary treatment. */
+button:not([type="submit"]):not(.btn-primary) {
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 0;
 }
 
 .btn-ghost {
@@ -653,6 +691,42 @@ select {
   font-size: 0.75rem;
   color: var(--text-subtle);
 }
+
+/* Two fields side by side where they naturally pair (amount + date). */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-3);
+}
+
+/* Marks a field as optional in the label itself, rather than leaving people
+   to infer it from the absence of a required marker. */
+.label-optional {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+/* Section heads need a rule under them or cards read as one undifferentiated
+   block of text. */
+.section-head {
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.card > h2:first-child {
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Secondary link in a card header — was unstyled body text. */
+.ghost {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.ghost:hover { text-decoration: underline; }
 
 .filter-grid {
   display: grid;
@@ -843,9 +917,26 @@ select {
   border-color: var(--border);
 }
 
-.profile-corner-meta { text-align: left; line-height: 1.25; }
-.profile-corner-meta strong { font-size: 0.875rem; font-weight: 550; }
-.profile-corner-meta .subtext { font-size: 0.75rem; }
+/* Must be a column: both children are inline <span>s, so without this the
+   name and the word "Account" render on one line and overlap. */
+.profile-corner-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.profile-corner-meta strong {
+  font-size: 0.875rem;
+  font-weight: 550;
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-corner-meta .subtext { font-size: 0.6875rem; }
 
 /* Chevron drawn in CSS. Was the literal letter "v", which screen readers
    announced as part of the button's name. */
@@ -915,7 +1006,7 @@ select {
   display: grid;
   place-items: center;
   padding: var(--s-4);
-  background: color-mix(in srgb, #0C0A09 55%, transparent);
+  background: color-mix(in srgb, #09090B 60%, transparent);
   backdrop-filter: blur(3px);
   animation: fade var(--t-base) var(--ease);
 }
@@ -1061,12 +1152,56 @@ select {
 
 /* ------------------------------------------------------------ dashboard -- */
 
+/* Explicit spans per page. Previously most cards fell through to the default
+   span 4, so a row of two cards filled 8 of 12 columns and left a third of
+   the row empty. Every row below adds up to 12. */
 .dashboard-hero { grid-column: span 12; }
+.dashboard-layout .dashboard-card { grid-column: span 6; }
+
+/* Insights: 4+4+4, then 6+6, then full width. */
+.insights-forecast,
+.insights-alerts,
+.insights-categories { grid-column: span 4; }
+/* Full width each: one holds a couple of progress bars, the other a five-row
+   list. Side by side, the shorter one leaves a conspicuous hole. */
+.insights-progress { grid-column: span 12; }
+.insights-largest { grid-column: span 12; }
+
+/* Planning and Expenses read as two equal columns. */
+.planning-limits,
+.planning-recurring { grid-column: span 6; }
+
+.reports-breakdown,
+.reports-daily { grid-column: span 6; }
+
+/* Two columns: the headline figure on the left, supporting numbers on the
+   right. Stacked, everything crowded into the left ~55% and the rest of the
+   card was empty. */
+.dashboard-hero .hero-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--s-6);
+  align-items: center;
+}
 
 .hero-figure {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--s-2);
+}
+
+.hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding-left: var(--s-6);
+  border-left: 1px solid var(--border);
+}
+
+@media (max-width: 780px) {
+  .dashboard-hero .hero-row { grid-template-columns: 1fr; gap: var(--s-5); }
+  .hero-side { padding-left: 0; border-left: none; padding-top: var(--s-4); border-top: 1px solid var(--border); }
 }
 
 .month-nav-actions { display: flex; gap: var(--s-2); }
@@ -1114,24 +1249,63 @@ td.amount, th.amount { text-align: right; }
 
 /* ------------------------------------------------------------ responsive -- */
 
+/* The per-page span rules above are two classes deep, so a single-class
+   override here loses on specificity and the cards stayed side by side on a
+   phone. Each breakpoint therefore restates them at matching specificity. */
 @media (max-width: 900px) {
-  .card, .card-half { grid-column: span 6; }
-  .card-wide, .dashboard-hero { grid-column: span 12; }
+  .card,
+  .card-half,
+  .dashboard-layout .dashboard-card,
+  .insights-forecast,
+  .insights-alerts,
+  .insights-categories,
+  .planning-limits,
+  .planning-recurring,
+  .reports-breakdown,
+  .reports-daily { grid-column: span 6; }
+
+  .card-wide,
+  .dashboard-hero,
+  .insights-progress,
+  .insights-largest,
   .profile-layout .profile-card,
   .profile-layout .profile-side-card { grid-column: span 12; }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .spa-shell { padding-inline: max(var(--s-3), env(safe-area-inset-left)); }
-  .card, .card-half, .card-wide { grid-column: span 12; }
+
+  .card,
+  .card-half,
+  .card-wide,
+  .dashboard-hero,
+  .dashboard-layout .dashboard-card,
+  .insights-forecast,
+  .insights-alerts,
+  .insights-categories,
+  .insights-progress,
+  .insights-largest,
+  .planning-limits,
+  .planning-recurring,
+  .reports-breakdown,
+  .reports-daily,
+  .profile-layout .profile-card,
+  .profile-layout .profile-side-card,
+  .profile-delete-card { grid-column: span 12; }
+
   .card { padding: var(--s-4); }
-  .spa-nav { margin: var(--s-4) auto; }
-  .profile-corner-meta { display: none; }   /* avatar alone is enough here */
+  .nav-wrap { margin: var(--s-4) auto; }
+  .profile-corner-meta { display: none; }   /* the avatar alone is enough here */
+  .form-row { grid-template-columns: 1fr; }
   .modal-body { grid-template-columns: 1fr; }
   .modal-footer { flex-direction: column-reverse; }
   .modal-footer button { width: 100%; }
   .history li { flex-direction: column; align-items: flex-start; gap: var(--s-2); }
   .table-scroll { margin-inline: calc(var(--s-4) * -1); padding-inline: var(--s-4); }
+
+  /* Let long labels wrap instead of being clipped to "Hou..." */
+  .list strong { white-space: normal; }
+  .list li { gap: var(--s-3); }
 }
 
 /* ------------------------------------------------------- reduced motion -- */

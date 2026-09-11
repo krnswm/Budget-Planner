@@ -197,17 +197,19 @@ function AppShell({
         </div>
       </header>
 
-      <nav className="spa-nav" aria-label="Primary">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) => (isActive ? "active" : undefined)}
-          >
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
+      <div className="nav-wrap">
+        <nav className="spa-nav" aria-label="Primary">
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => (isActive ? "active" : undefined)}
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+      </div>
 
       {/* role="alert" so the message is announced. It auto-dismisses after
           3s, so a silent banner is invisible to a screen-reader user. */}
@@ -289,36 +291,40 @@ function DashboardPage({ apiRequest }) {
               </div>
             </div>
 
-            <div className="hero-figure">
-              <span className="metric-label">Remaining to spend</span>
-              <p className={`balance metric-${tone}`}>{money.format(data.remaining || 0)}</p>
-              {/* The status word travels with the colour. A green/amber/red
-                  bar alone is invisible to anyone who cannot distinguish
-                  those hues, and disappears entirely in greyscale. */}
-              <span className={`status-pill status-${tone}`}>{STATUS_LABEL[tone]}</span>
-            </div>
-
-            <div
-              className={`meter meter-${tone}`}
-              role="progressbar"
-              aria-valuenow={Math.round(percentSpent)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={`${Math.round(percentSpent)}% of budget spent`}
-            >
-              <div className="meter-fill" style={{ width: `${percentSpent}%` }} />
-            </div>
-
-            {data.paceMessage ? <p className="subtext">{data.paceMessage}</p> : null}
-
-            <div className="metrics-display">
-              <div className="metric-item">
-                <span className="metric-label">Spent</span>
-                <strong>{money.format(data.spent || 0)}</strong>
+            <div className="hero-row">
+              <div className="hero-figure">
+                <span className="metric-label">Remaining to spend</span>
+                <p className={`balance metric-${tone}`}>{money.format(data.remaining || 0)}</p>
+                {/* The status word travels with the colour. A green/amber/red
+                    bar alone is invisible to anyone who cannot distinguish
+                    those hues, and disappears entirely in greyscale. */}
+                <span className={`status-pill status-${tone}`}>{STATUS_LABEL[tone]}</span>
               </div>
-              <div className="metric-item">
-                <span className="metric-label">Total Budget</span>
-                <strong>{money.format(data.totalBudget || 0)}</strong>
+
+              <div className="hero-side">
+                <div className="metrics-display">
+                  <div className="metric-item">
+                    <span className="metric-label">Spent</span>
+                    <strong>{money.format(data.spent || 0)}</strong>
+                  </div>
+                  <div className="metric-item">
+                    <span className="metric-label">Total budget</span>
+                    <strong>{money.format(data.totalBudget || 0)}</strong>
+                  </div>
+                </div>
+
+                <div
+                  className={`meter meter-${tone}`}
+                  role="progressbar"
+                  aria-valuenow={Math.round(percentSpent)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${Math.round(percentSpent)}% of budget spent`}
+                >
+                  <div className="meter-fill" style={{ width: `${percentSpent}%` }} />
+                </div>
+
+                {data.paceMessage ? <p className="subtext">{data.paceMessage}</p> : null}
               </div>
             </div>
           </section>
@@ -366,14 +372,34 @@ function DashboardPage({ apiRequest }) {
                   await load(monthKey);
                 }}
               >
-                <input type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="Amount" aria-label="Amount" inputMode="decimal" required />
-                <input type="text" value={expenseForm.label} onChange={(event) => setExpenseForm((prev) => ({ ...prev, label: event.target.value }))} placeholder="Label" aria-label="Label" required />
-                <select aria-label="Category" value={expenseForm.category} onChange={(event) => setExpenseForm((prev) => ({ ...prev, category: event.target.value }))}>
-                  {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
-                </select>
-                <input type="date" aria-label="Date of expense" value={expenseForm.spentOn} onChange={(event) => setExpenseForm((prev) => ({ ...prev, spentOn: event.target.value }))} required />
-                <input type="text" value={expenseForm.note} onChange={(event) => setExpenseForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="Note" aria-label="Note (optional)" />
-                <button type="submit">Add Expense</button>
+                {/* Visible labels, not placeholders. A placeholder vanishes the
+                    moment someone types, so the field loses its name exactly
+                    when they are checking what they entered. */}
+                <div className="form-row">
+                  <div className="field">
+                    <label htmlFor="qa-amount">Amount</label>
+                    <input id="qa-amount" type="number" min="0.01" step="0.01" inputMode="decimal" value={expenseForm.amount} onChange={(event) => setExpenseForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="0.00" required />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="qa-date">Date</label>
+                    <input id="qa-date" type="date" value={expenseForm.spentOn} onChange={(event) => setExpenseForm((prev) => ({ ...prev, spentOn: event.target.value }))} required />
+                  </div>
+                </div>
+                <div className="field">
+                  <label htmlFor="qa-label">What was it for?</label>
+                  <input id="qa-label" type="text" value={expenseForm.label} onChange={(event) => setExpenseForm((prev) => ({ ...prev, label: event.target.value }))} placeholder="e.g. Groceries" required />
+                </div>
+                <div className="field">
+                  <label htmlFor="qa-category">Category</label>
+                  <select id="qa-category" value={expenseForm.category} onChange={(event) => setExpenseForm((prev) => ({ ...prev, category: event.target.value }))}>
+                    {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="qa-note">Note <span className="label-optional">optional</span></label>
+                  <input id="qa-note" type="text" value={expenseForm.note} onChange={(event) => setExpenseForm((prev) => ({ ...prev, note: event.target.value }))} />
+                </div>
+                <button type="submit">Add expense</button>
               </form>
             </div>
           </section>
@@ -676,7 +702,7 @@ function PlanningPage({ apiRequest }) {
 
   return (
     <div className="grid">
-      <section className="card">
+      <section className="card planning-limits">
         <h2>Category Limits</h2>
         <form
           className="stack"
@@ -764,7 +790,7 @@ function PlanningPage({ apiRequest }) {
         </div>
       </section>
 
-      <section className="card">
+      <section className="card planning-recurring">
         <h2>Recurring Expenses</h2>
         <form
           className="stack"
@@ -947,7 +973,7 @@ function InsightsPage({ apiRequest }) {
         </div>
       </section>
 
-      <section className="card">
+      <section className="card insights-forecast">
         <h2>Forecast</h2>
         <ul className="list compact-list">
           <li><span>Projected month-end spend</span><strong>{money.format(data.projectedSpent || 0)}</strong></li>
@@ -956,7 +982,7 @@ function InsightsPage({ apiRequest }) {
         </ul>
       </section>
 
-      <section className="card">
+      <section className="card insights-alerts">
         <h2>Alerts</h2>
         {!data.alerts || data.alerts.length === 0 ? <p className="subtext">No critical alerts. Keep going.</p> : (
           <ul className="list compact-list">
@@ -967,7 +993,7 @@ function InsightsPage({ apiRequest }) {
         )}
       </section>
 
-      <section className="card">
+      <section className="card insights-categories">
         <h2>Top Categories</h2>
         {!data.topCategories || data.topCategories.length === 0 ? <p className="subtext">No category data yet.</p> : (
           <ul className="list compact-list">
@@ -981,7 +1007,7 @@ function InsightsPage({ apiRequest }) {
         )}
       </section>
 
-      <section className="card">
+      <section className="card insights-progress">
         <h2>Category Progress</h2>
         {!data.categoryProgress || data.categoryProgress.length === 0 ? <p className="subtext">No category limits set.</p> : (
           <ul className="list compact-list">
@@ -998,7 +1024,7 @@ function InsightsPage({ apiRequest }) {
         )}
       </section>
 
-      <section className="card card-wide">
+      <section className="card insights-largest">
         <h2>Largest Transactions</h2>
         {!data.biggestExpenses || data.biggestExpenses.length === 0 ? <p className="subtext">No transactions this month.</p> : (
           <ul className="list">
@@ -1086,7 +1112,7 @@ function ReportsPage({ apiRequest }) {
         </div>
       </section>
 
-      <section className="card">
+      <section className="card reports-breakdown">
         <h2>Category Breakdown</h2>
         {!data.categoryBreakdown || data.categoryBreakdown.length === 0 ? <p className="subtext">No category data in this range.</p> : (
           <ul className="list compact-list">
@@ -1100,7 +1126,7 @@ function ReportsPage({ apiRequest }) {
         )}
       </section>
 
-      <section className="card">
+      <section className="card reports-daily">
         <h2>Daily Totals</h2>
         {!data.dailyTotals || data.dailyTotals.length === 0 ? <p className="subtext">No day-wise spend in this range.</p> : (
           <ul className="list compact-list">
