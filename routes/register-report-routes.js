@@ -33,8 +33,8 @@ function registerReportRoutes(app, deps) {
             SELECT spent_on, label, category, note, amount
             FROM expenses
             WHERE user_id = ?
-              AND COALESCE(spent_on, substr(created_at, 1, 10)) >= ?
-              AND COALESCE(spent_on, substr(created_at, 1, 10)) <= ?
+              AND COALESCE(spent_on, created_at::date) >= ?
+              AND COALESCE(spent_on, created_at::date) <= ?
             ORDER BY COALESCE(spent_on, created_at) DESC
           `
           : `
@@ -88,8 +88,8 @@ function registerReportRoutes(app, deps) {
               SELECT COALESCE(SUM(amount), 0) AS spent
               FROM expenses
               WHERE user_id = ?
-                AND COALESCE(spent_on, substr(created_at, 1, 10)) >= ?
-                AND COALESCE(spent_on, substr(created_at, 1, 10)) <= ?
+                AND COALESCE(spent_on, created_at::date) >= ?
+                AND COALESCE(spent_on, created_at::date) <= ?
             `
             : `
               SELECT mb.total_budget,
@@ -110,8 +110,8 @@ function registerReportRoutes(app, deps) {
               SELECT spent_on, label, category, amount
               FROM expenses
               WHERE user_id = ?
-                AND COALESCE(spent_on, substr(created_at, 1, 10)) >= ?
-                AND COALESCE(spent_on, substr(created_at, 1, 10)) <= ?
+                AND COALESCE(spent_on, created_at::date) >= ?
+                AND COALESCE(spent_on, created_at::date) <= ?
               ORDER BY COALESCE(spent_on, created_at) DESC
             `
             : `

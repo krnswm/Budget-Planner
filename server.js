@@ -1,8 +1,9 @@
+require("./lib/load-env");
+
 const path = require("path");
 const { execSync } = require("child_process");
 const fs = require("fs");
 const PDFDocument = require("pdfkit");
-const dotenv = require("dotenv");
 const express = require("express");
 const morgan = require("morgan");
 const session = require("express-session");
@@ -15,21 +16,17 @@ const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const rateLimit = require("express-rate-limit");
 const csrf = require("csurf");
-const sqlite3 = require("sqlite3").verbose();
+// Data access. run/get/all keep the signatures the old sqlite3 helpers had,
+// and lib/db.js rewrites `?` placeholders into `$1, $2, ...`, so the route
+// modules did not need re-parameterising. Schema lives in migrations/ and is
+// applied with `npm run migrate`, rather than being mutated at every boot.
+const { run, get, all, transaction, closeDatabase } = require("./lib/db");
 const registerSpaApiRoutes = require("./routes/register-spa-api-routes");
 const registerAuthRoutes = require("./routes/register-auth-routes");
 const registerReportRoutes = require("./routes/register-report-routes");
 
 const app = express();
 const NODE_ENV = process.env.NODE_ENV || "development";
-const envSpecificPath = path.join(__dirname, `.env.${NODE_ENV}`);
-
-if (fs.existsSync(envSpecificPath)) {
-  dotenv.config({ path: envSpecificPath });
-}
-
-dotenv.config();
-
 const PORT = process.env.PORT || 3000;
 const IS_PRODUCTION = NODE_ENV === "production";
 const SESSION_COOKIE_SAMESITE = process.env.SESSION_COOKIE_SAMESITE || "lax";
@@ -37,9 +34,6 @@ const SESSION_SECRET = String(process.env.SESSION_SECRET || "").trim();
 const APP_DOMAIN = String(process.env.APP_DOMAIN || "").trim().toLowerCase();
 const FORCE_HTTPS = process.env.FORCE_HTTPS === "true" || IS_PRODUCTION;
 const TRUST_PROXY = Number(process.env.TRUST_PROXY || 1);
-const BACKUP_INTERVAL_HOURS = Number(process.env.BACKUP_INTERVAL_HOURS || (IS_PRODUCTION ? 24 : 0));
-const BACKUP_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 7);
-const backupDirConfig = String(process.env.BACKUP_DIR || "backups").trim();
 const EXPENSE_CATEGORIES = ["Food", "Travel", "Bills", "Shopping", "Health", "Education", "Other"];
 const GOOGLE_AUTH_VARS = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_CALLBACK_URL"];
 const GOOGLE_AUTH_SET = GOOGLE_AUTH_VARS.filter((name) => String(process.env[name] || "").trim());
@@ -47,9 +41,6 @@ const GOOGLE_AUTH_ENABLED = GOOGLE_AUTH_SET.length === GOOGLE_AUTH_VARS.length;
 const logsDir = path.join(__dirname, "logs");
 const reactDistDir = path.join(__dirname, "client", "dist");
 const reactIndexFile = path.join(reactDistDir, "index.html");
-const backupsDir = path.isAbsolute(backupDirConfig)
-  ? backupDirConfig
-  : path.join(__dirname, backupDirConfig);
 
 if (IS_PRODUCTION && SESSION_SECRET.length < 32) {
   throw new Error("SESSION_SECRET must be set to a strong value (at least 32 characters) in production.");
@@ -117,248 +108,6 @@ function resolveRedisUrl() {
 const RESOLVED_REDIS_URL = resolveRedisUrl();
 const USE_REDIS_SESSIONS = Boolean(RESOLVED_REDIS_URL);
 
-// DB_PATH lets tests and migration dry-runs point at a throwaway database.
-// Without it the test suite wrote into the live file, which is how 123 junk
-// users ended up alongside real financial records.
-const dbPathConfig = String(process.env.DB_PATH || "").trim();
-const dbPath = dbPathConfig
-  ? (path.isAbsolute(dbPathConfig) ? dbPathConfig : path.join(__dirname, dbPathConfig))
-  : path.join(__dirname, "db", "budget.db");
-const db = new sqlite3.Database(dbPath);
-
-function run(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function onRun(err) {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve(this);
-    });
-  });
-}
-
-function get(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve(row);
-    });
-  });
-}
-
-function all(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve(rows);
-    });
-  });
-}
-
-function closeDatabase() {
-  return new Promise((resolve) => {
-    db.close(() => resolve());
-  });
-}
-
-async function initializeDatabase() {
-  await run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )
-  `);
-
-  await run(`
-    CREATE TABLE IF NOT EXISTS monthly_budgets (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      month_key TEXT NOT NULL,
-      total_budget REAL NOT NULL CHECK(total_budget > 0),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(user_id, month_key),
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-  `);
-
-  await run(`
-    CREATE TABLE IF NOT EXISTS expenses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      month_key TEXT NOT NULL,
-      amount REAL NOT NULL CHECK(amount > 0),
-      label TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-  `);
-
-  await run(`
-    CREATE TABLE IF NOT EXISTS password_reset_tokens (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      token_hash TEXT NOT NULL UNIQUE,
-      expires_at TEXT NOT NULL,
-      used_at TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-  `);
-
-  await run(
-    "CREATE INDEX IF NOT EXISTS idx_reset_tokens_user_id ON password_reset_tokens(user_id)"
-  );
-
-  await run(
-    "CREATE INDEX IF NOT EXISTS idx_reset_tokens_expires_at ON password_reset_tokens(expires_at)"
-  );
-
-  await run(`
-    CREATE TABLE IF NOT EXISTS email_verification_tokens (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      new_email TEXT NOT NULL,
-      token_hash TEXT NOT NULL UNIQUE,
-      expires_at TEXT NOT NULL,
-      verified_at TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-  `);
-
-  await run(
-    "CREATE INDEX IF NOT EXISTS idx_email_verification_user_id ON email_verification_tokens(user_id)"
-  );
-
-  await run(
-    "CREATE INDEX IF NOT EXISTS idx_email_verification_expires_at ON email_verification_tokens(expires_at)"
-  );
-
-  // Column/constraint migrations run last, once every table above exists.
-  // These previously ran first, so ensureExpensesSchema() issued ALTER TABLE
-  // against a table that had not been created yet. That made bootstrapping a
-  // fresh database impossible -- it only ever worked because db/budget.db
-  // was already present.
-  await ensureUsersSchema();
-  await ensureExpensesSchema();
-  await ensureCategoryLimitsSchema();
-  await ensureRecurringExpensesSchema();
-}
-
-async function ensureUsersSchema() {
-  const columns = await all("PRAGMA table_info(users)");
-  const hasGoogleId = columns.some((column) => column.name === "google_id");
-  const hasFullName = columns.some((column) => column.name === "full_name");
-  const hasAvatarUrl = columns.some((column) => column.name === "avatar_url");
-
-  if (!hasGoogleId) {
-    await run("ALTER TABLE users ADD COLUMN google_id TEXT");
-  }
-
-  if (!hasFullName) {
-    await run("ALTER TABLE users ADD COLUMN full_name TEXT");
-  }
-
-  if (!hasAvatarUrl) {
-    await run("ALTER TABLE users ADD COLUMN avatar_url TEXT");
-  }
-
-  await run(
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL"
-  );
-}
-
-async function ensureExpensesSchema() {
-  const columns = await all("PRAGMA table_info(expenses)");
-  const hasCategory = columns.some((column) => column.name === "category");
-  const hasNote = columns.some((column) => column.name === "note");
-  const hasSpentOn = columns.some((column) => column.name === "spent_on");
-
-  if (!hasCategory) {
-    await run("ALTER TABLE expenses ADD COLUMN category TEXT NOT NULL DEFAULT 'Other'");
-  }
-
-  if (!hasNote) {
-    await run("ALTER TABLE expenses ADD COLUMN note TEXT");
-  }
-
-  if (!hasSpentOn) {
-    await run("ALTER TABLE expenses ADD COLUMN spent_on TEXT");
-  }
-}
-
-async function ensureCategoryLimitsSchema() {
-  await run(`
-    CREATE TABLE IF NOT EXISTS category_limits (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      month_key TEXT NOT NULL,
-      category TEXT NOT NULL,
-      limit_amount REAL NOT NULL CHECK(limit_amount > 0),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(user_id, month_key, category),
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-  `);
-}
-
-const RECURRING_EXPENSES_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS recurring_expenses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    label TEXT NOT NULL,
-    amount REAL NOT NULL CHECK(amount > 0),
-    category TEXT NOT NULL DEFAULT 'Other',
-    note TEXT,
-    day_of_month INTEGER NOT NULL CHECK(day_of_month >= 1 AND day_of_month <= 31),
-    is_active INTEGER NOT NULL DEFAULT 1,
-    last_applied_month TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY(user_id) REFERENCES users(id)
-  )
-`;
-
-async function ensureRecurringExpensesSchema() {
-  await run(RECURRING_EXPENSES_TABLE_SQL);
-
-  // Older databases capped day_of_month at 28, while the API accepted 1-31.
-  // Days 29-31 passed validation and then failed the CHECK as an opaque 500.
-  // SQLite cannot ALTER a CHECK constraint, so widening it needs a rebuild.
-  const [tableDef] = await all(
-    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'recurring_expenses'"
-  );
-
-  if (!tableDef || !tableDef.sql.includes("day_of_month <= 28")) {
-    return;
-  }
-
-  await run("BEGIN IMMEDIATE");
-  try {
-    await run(RECURRING_EXPENSES_TABLE_SQL.replace("IF NOT EXISTS recurring_expenses", "recurring_expenses_rebuilt"));
-    await run(`
-      INSERT INTO recurring_expenses_rebuilt
-        (id, user_id, label, amount, category, note, day_of_month, is_active, last_applied_month, created_at)
-      SELECT id, user_id, label, amount, category, note, day_of_month, is_active, last_applied_month, created_at
-      FROM recurring_expenses
-    `);
-    await run("DROP TABLE recurring_expenses");
-    await run("ALTER TABLE recurring_expenses_rebuilt RENAME TO recurring_expenses");
-    await run("COMMIT");
-  } catch (error) {
-    await run("ROLLBACK");
-    throw error;
-  }
-}
-
 function getCurrentMonthKey() {
   const now = new Date();
   const year = now.getFullYear();
@@ -397,48 +146,13 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ""));
 }
 
-function toTimestampKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-  return `${year}${month}${day}-${hours}${minutes}${seconds}`;
-}
+// The file-copy backup system is gone. It copied a live SQLite file with
+// fs.copyFileSync, which can capture a torn page, and drove itself from a
+// setInterval that cannot run on serverless at all. Neon provides
+// point-in-time restore; scripts/export-db.js takes a manual dump.
 
-function createDatabaseBackup() {
-  try {
-    if (!fs.existsSync(backupsDir)) {
-      fs.mkdirSync(backupsDir, { recursive: true });
-    }
-
-    const backupFilePath = path.join(backupsDir, `budget-${toTimestampKey()}.sqlite`);
-    fs.copyFileSync(dbPath, backupFilePath);
-
-    const retentionCutoff = Date.now() - BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-    const backupFiles = fs
-      .readdirSync(backupsDir)
-      .filter((fileName) => fileName.startsWith("budget-") && fileName.endsWith(".sqlite"));
-
-    for (const fileName of backupFiles) {
-      const fullPath = path.join(backupsDir, fileName);
-      const stat = fs.statSync(fullPath);
-      if (stat.mtimeMs < retentionCutoff) {
-        fs.unlinkSync(fullPath);
-      }
-    }
-
-    return { ok: true, file: backupFilePath };
-  } catch (error) {
-    const message = `${new Date().toISOString()} BACKUP_ERROR ${error.message}\n`;
-    errorLogStream.write(message);
-    return { ok: false, error: error.message };
-  }
-}
-
-// Declared here rather than beside the session-store setup below, so that
-// getHealthSnapshot() does not reference a binding defined later in the file.
+// Declared ahead of getHealthSnapshot() so that function does not reference
+// a binding defined later in the file.
 let redisClient = null;
 let sessionStore = null;
 
@@ -455,34 +169,41 @@ function getHealthSnapshot() {
 }
 
 async function applyRecurringExpensesForMonth(userId, monthKey) {
-  const recurringItems = await all(
-    `
-      SELECT id, label, amount, category, note, day_of_month, last_applied_month
-      FROM recurring_expenses
-      WHERE user_id = ? AND is_active = 1
-      ORDER BY id DESC
-    `,
-    [userId]
-  );
+  const daysInMonth = getDaysInMonthFromKey(monthKey);
 
-  for (const item of recurringItems) {
-    if (item.last_applied_month === monthKey) {
-      continue;
-    }
-
-    // A rule set for the 31st must still fire in a 30-day month, and in
-    // February. Clamp to the last real day rather than building an
-    // impossible date like 2026-02-31.
-    const effectiveDay = Math.min(item.day_of_month, getDaysInMonthFromKey(monthKey));
-    const spentOn = `${monthKey}-${String(effectiveDay).padStart(2, "0")}`;
-
-    await run(
-      "INSERT INTO expenses (user_id, month_key, amount, label, category, note, spent_on) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [userId, monthKey, Number(item.amount), item.label, item.category || "Other", item.note || null, spentOn]
+  return transaction(async (tx) => {
+    // Claim every rule still owed for this month in one statement, then
+    // insert only what was actually claimed. This runs from GET handlers, so
+    // two concurrent page loads used to read the same unapplied rules and
+    // insert the expense twice; whichever request claims a row now wins, and
+    // the other sees nothing to do.
+    const claimed = await tx.all(
+      `
+        UPDATE recurring_expenses
+        SET last_applied_month = ?
+        WHERE user_id = ?
+          AND is_active = TRUE
+          AND last_applied_month IS DISTINCT FROM ?
+        RETURNING id, label, amount, category, note, day_of_month
+      `,
+      [monthKey, userId, monthKey]
     );
 
-    await run("UPDATE recurring_expenses SET last_applied_month = ? WHERE id = ?", [monthKey, item.id]);
-  }
+    for (const item of claimed) {
+      // A rule set for the 31st must still fire in a 30-day month, and in
+      // February. Clamp to the last real day rather than building an
+      // impossible date like 2026-02-31.
+      const effectiveDay = Math.min(item.day_of_month, daysInMonth);
+      const spentOn = `${monthKey}-${String(effectiveDay).padStart(2, "0")}`;
+
+      await tx.run(
+        "INSERT INTO expenses (user_id, month_key, amount, label, category, note, spent_on) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [userId, monthKey, item.amount, item.label, item.category || "Other", item.note || null, spentOn]
+      );
+    }
+
+    return claimed.length;
+  });
 }
 
 function currency(value) {
@@ -612,7 +333,7 @@ if (GOOGLE_AUTH_ENABLED) {
           const randomPassword = crypto.randomUUID();
           const passwordHash = await bcrypt.hash(randomPassword, 10);
           const result = await run(
-            "INSERT INTO users (email, password_hash, google_id, full_name) VALUES (?, ?, ?, ?)",
+            "INSERT INTO users (email, password_hash, google_id, full_name) VALUES (?, ?, ?, ?) RETURNING id",
             [email, passwordHash, googleId, fullName]
           );
 
@@ -774,46 +495,44 @@ app.use((error, req, res, next) => {
 });
 
 async function startServer() {
-  await initializeDatabase();
+  // Schema is applied by `npm run migrate`, not at boot. Fail early with a
+  // message that names the actual problem, since "cannot reach the database"
+  // and "reached it but it has no schema" need different fixes.
+  if (!String(process.env.DATABASE_URL || "").trim()) {
+    throw new Error("DATABASE_URL is not set. Copy the pooled connection string from your Neon dashboard into .env.");
+  }
 
-    if (BACKUP_INTERVAL_HOURS > 0) {
-      const backupResult = createDatabaseBackup();
-      if (backupResult.ok) {
-        // eslint-disable-next-line no-console
-        console.log(`Database backup created: ${backupResult.file}`);
-      }
-
-      const intervalMs = BACKUP_INTERVAL_HOURS * 60 * 60 * 1000;
-      setInterval(createDatabaseBackup, intervalMs);
+  try {
+    await get("SELECT 1 FROM schema_migrations LIMIT 1");
+  } catch (error) {
+    if (/relation .*schema_migrations.* does not exist/i.test(error.message)) {
+      throw new Error("Database has no schema yet. Run: npm run migrate");
     }
+    throw new Error(`Cannot reach the database: ${error.message}`);
+  }
 
-    if (redisClient && !redisClient.isOpen) {
-      try {
-        await redisClient.connect();
-        // eslint-disable-next-line no-console
-        console.log("Redis session store connected.");
-      } catch (error) {
-        const message = `Redis connection failed: ${error.message}`;
-        // eslint-disable-next-line no-console
-        console.error(message);
-        if (IS_PRODUCTION) {
-          throw new Error(message);
-        }
-        // eslint-disable-next-line no-console
-        console.warn("Continuing without Redis. Sessions will use SQLite instead.");
+  if (redisClient && !redisClient.isOpen) {
+    try {
+      await redisClient.connect();
+      console.log("Redis session store connected.");
+    } catch (error) {
+      const message = `Redis connection failed: ${error.message}`;
+      console.error(message);
+      if (IS_PRODUCTION) {
+        throw new Error(message);
       }
+      console.warn("Continuing without Redis. Sessions will use SQLite instead.");
     }
+  }
 
-    return app.listen(PORT, () => {
-      // eslint-disable-next-line no-console
-      console.log(`Budget Planner running at http://localhost:${PORT}`);
-    });
+  return app.listen(PORT, () => {
+    console.log(`Budget Planner running at http://localhost:${PORT}`);
+  });
 }
 
 if (require.main === module) {
   startServer().catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error("Database initialization failed:", error);
+    console.error("Startup failed:", error.message);
     process.exit(1);
   });
 }
@@ -821,13 +540,11 @@ if (require.main === module) {
 module.exports = {
   app,
   startServer,
-  initializeDatabase,
   closeDatabase,
   getCurrentMonthKey,
   parseMonthFromDate,
   isIsoDate,
   applyRecurringExpensesForMonth,
-  createDatabaseBackup,
   getHealthSnapshot,
   run,
   get,

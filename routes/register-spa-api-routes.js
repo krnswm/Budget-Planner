@@ -277,12 +277,12 @@ function registerSpaApiRoutes(app, deps) {
       }
 
       if (startDateFilter && isIsoDate(startDateFilter)) {
-        expenseFilterConditions.push("COALESCE(spent_on, substr(created_at, 1, 10)) >= ?");
+        expenseFilterConditions.push("COALESCE(spent_on, created_at::date) >= ?");
         expenseFilterParams.push(startDateFilter);
       }
 
       if (endDateFilter && isIsoDate(endDateFilter)) {
-        expenseFilterConditions.push("COALESCE(spent_on, substr(created_at, 1, 10)) <= ?");
+        expenseFilterConditions.push("COALESCE(spent_on, created_at::date) <= ?");
         expenseFilterParams.push(endDateFilter);
       }
 
@@ -605,7 +605,7 @@ function registerSpaApiRoutes(app, deps) {
 
     try {
       await run(
-        "INSERT INTO recurring_expenses (user_id, label, amount, category, note, day_of_month, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)",
+        "INSERT INTO recurring_expenses (user_id, label, amount, category, note, day_of_month, is_active) VALUES (?, ?, ?, ?, ?, ?, TRUE)",
         [req.session.userId, label, amount, category, note || null, dayOfMonth]
       );
       res.json({ ok: true });
@@ -623,18 +623,19 @@ function registerSpaApiRoutes(app, deps) {
     }
 
     try {
-      const row = await get(
-        "SELECT is_active FROM recurring_expenses WHERE id = ? AND user_id = ?",
+      // Flipping in SQL keeps this a single atomic statement, and the row
+      // count doubles as the ownership check. Reading is_active first and
+      // writing the opposite back let two rapid toggles cancel each other out.
+      const result = await run(
+        "UPDATE recurring_expenses SET is_active = NOT is_active WHERE id = ? AND user_id = ?",
         [recurringId, req.session.userId]
       );
 
-      if (!row) {
+      if (result.changes === 0) {
         res.status(404).json({ message: "Recurring expense not found." });
         return;
       }
 
-      const nextActive = row.is_active ? 0 : 1;
-      await run("UPDATE recurring_expenses SET is_active = ? WHERE id = ?", [nextActive, recurringId]);
       res.json({ ok: true });
     } catch (error) {
       res.status(500).json({ message: "Unable to update recurring expense right now." });
@@ -857,8 +858,8 @@ function registerSpaApiRoutes(app, deps) {
             SELECT COALESCE(SUM(amount), 0) AS spent
             FROM expenses
             WHERE user_id = ?
-              AND COALESCE(spent_on, substr(created_at, 1, 10)) >= ?
-              AND COALESCE(spent_on, substr(created_at, 1, 10)) <= ?
+              AND COALESCE(spent_on, created_at::date) >= ?
+              AND COALESCE(spent_on, created_at::date) <= ?
           `,
           [req.session.userId, startDate, endDate]
         ),
@@ -867,8 +868,8 @@ function registerSpaApiRoutes(app, deps) {
             SELECT spent_on, label, category, note, amount
             FROM expenses
             WHERE user_id = ?
-              AND COALESCE(spent_on, substr(created_at, 1, 10)) >= ?
-              AND COALESCE(spent_on, substr(created_at, 1, 10)) <= ?
+              AND COALESCE(spent_on, created_at::date) >= ?
+              AND COALESCE(spent_on, created_at::date) <= ?
             ORDER BY COALESCE(spent_on, created_at) DESC
           `,
           [req.session.userId, startDate, endDate]
@@ -878,8 +879,8 @@ function registerSpaApiRoutes(app, deps) {
             SELECT category, COALESCE(SUM(amount), 0) AS total
             FROM expenses
             WHERE user_id = ?
-              AND COALESCE(spent_on, substr(created_at, 1, 10)) >= ?
-              AND COALESCE(spent_on, substr(created_at, 1, 10)) <= ?
+              AND COALESCE(spent_on, created_at::date) >= ?
+              AND COALESCE(spent_on, created_at::date) <= ?
             GROUP BY category
             ORDER BY total DESC
           `,
@@ -887,11 +888,11 @@ function registerSpaApiRoutes(app, deps) {
         ),
         all(
           `
-            SELECT COALESCE(spent_on, substr(created_at, 1, 10)) AS day_key, COALESCE(SUM(amount), 0) AS total
+            SELECT COALESCE(spent_on, created_at::date) AS day_key, COALESCE(SUM(amount), 0) AS total
             FROM expenses
             WHERE user_id = ?
-              AND COALESCE(spent_on, substr(created_at, 1, 10)) >= ?
-              AND COALESCE(spent_on, substr(created_at, 1, 10)) <= ?
+              AND COALESCE(spent_on, created_at::date) >= ?
+              AND COALESCE(spent_on, created_at::date) <= ?
             GROUP BY day_key
             ORDER BY day_key ASC
           `,

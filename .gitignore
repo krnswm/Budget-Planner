@@ -3,8 +3,6 @@
 .env
 .env.*
 !.env.example
-!.env.development.example
-!.env.production.example
 
 # ---- Data ----------------------------------------------------------------
 # SQLite databases hold real financial records. Never commit them.

@@ -1,25 +1,29 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
 const request = require("supertest");
+
+require("../lib/load-env");
 
 process.env.REDIS_URL = "";
 process.env.REDIS_AUTO_WSL = "false";
 
-// Point the app at a throwaway database BEFORE requiring it. Previously the
-// suite ran against db/budget.db, which is how 123 junk users accumulated
-// alongside real financial records.
-const testDbPath = path.join(
-  fs.mkdtempSync(path.join(os.tmpdir(), "budget-test-")),
-  "budget.db"
-);
-process.env.DB_PATH = testDbPath;
+// These tests write real rows, so they must never run against the database
+// the app uses. Set TEST_DATABASE_URL to a separate Neon branch -- branches
+// are free and instant, which is exactly what they are for.
+//
+// The suite previously ran against db/budget.db directly, which is how 123
+// junk users accumulated alongside real financial records.
+const testDatabaseUrl = String(process.env.TEST_DATABASE_URL || "").trim();
+const skip = testDatabaseUrl
+  ? false
+  : "TEST_DATABASE_URL is not set - create a Neon branch and point it there";
+
+if (testDatabaseUrl) {
+  process.env.DATABASE_URL = testDatabaseUrl;
+}
 
 const {
   app,
-  initializeDatabase,
   closeDatabase,
   getCurrentMonthKey,
   parseMonthFromDate,
@@ -29,9 +33,7 @@ const {
 } = require("../server");
 
 test.after(async () => {
-  // Windows will not unlink a file sqlite3 still holds open.
   await closeDatabase();
-  fs.rmSync(path.dirname(testDbPath), { recursive: true, force: true });
 });
 
 function extractCsrfToken(html) {
@@ -39,8 +41,7 @@ function extractCsrfToken(html) {
   return match ? match[1] : "";
 }
 
-test("auth flow: register, logout, login, dashboard", async () => {
-  await initializeDatabase();
+test("auth flow: register, logout, login, dashboard", { skip }, async () => {
 
   const agent = request.agent(app);
   const email = `test-user-${Date.now()}@example.com`;
@@ -87,8 +88,7 @@ test("auth flow: register, logout, login, dashboard", async () => {
   assert.equal(loginResponse.headers.location, "/app");
 });
 
-test("month rollover helpers and recurring expense application", async () => {
-  await initializeDatabase();
+test("month rollover helpers and recurring expense application", { skip }, async () => {
 
   const monthKey = getCurrentMonthKey();
   assert.match(monthKey, /^\d{4}-\d{2}$/);
@@ -107,7 +107,7 @@ test("month rollover helpers and recurring expense application", async () => {
   assert.ok(user && user.id);
 
   await run(
-    "INSERT INTO recurring_expenses (user_id, label, amount, category, note, day_of_month, is_active, last_applied_month) VALUES (?, ?, ?, ?, ?, ?, 1, NULL)",
+    "INSERT INTO recurring_expenses (user_id, label, amount, category, note, day_of_month, is_active, last_applied_month) VALUES (?, ?, ?, ?, ?, ?, TRUE, NULL)",
     [user.id, "Test Rent", 1000, "Bills", "Monthly recurring", 5]
   );
 
@@ -126,8 +126,7 @@ test("month rollover helpers and recurring expense application", async () => {
   assert.equal(Number(countAfterSecond.total), 1);
 });
 
-test("health endpoint responds with status payload", async () => {
-  await initializeDatabase();
+test("health endpoint responds with status payload", { skip }, async () => {
 
   const response = await request(app).get("/healthz");
   assert.equal(response.status, 200);
@@ -135,7 +134,7 @@ test("health endpoint responds with status payload", async () => {
   assert.ok(typeof response.body.timestamp === "string");
 });
 
-test("login rejects invalid email format with clear message", async () => {
+test("login rejects invalid email format with clear message", { skip }, async () => {
   const agent = request.agent(app);
   const loginPage = await agent.get("/login");
   const csrfToken = extractCsrfToken(loginPage.text);

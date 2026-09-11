@@ -37,7 +37,7 @@ function registerAuthRoutes(app, deps) {
     try {
       const passwordHash = await bcrypt.hash(password, 10);
       const result = await run(
-        "INSERT INTO users (email, password_hash, full_name) VALUES (?, ?, ?)",
+        "INSERT INTO users (email, password_hash, full_name) VALUES (?, ?, ?) RETURNING id",
         [email, passwordHash, fullName || null]
       );
 
@@ -200,7 +200,7 @@ function registerAuthRoutes(app, deps) {
           FROM password_reset_tokens
           WHERE token_hash = ?
             AND used_at IS NULL
-            AND datetime(expires_at) > datetime('now')
+            AND expires_at > NOW()
         `,
         [tokenHash]
       );
@@ -258,7 +258,7 @@ function registerAuthRoutes(app, deps) {
           FROM password_reset_tokens
           WHERE token_hash = ?
             AND used_at IS NULL
-            AND datetime(expires_at) > datetime('now')
+            AND expires_at > NOW()
         `,
         [tokenHash]
       );
@@ -274,7 +274,7 @@ function registerAuthRoutes(app, deps) {
 
       const passwordHash = await bcrypt.hash(password, 10);
       await run("UPDATE users SET password_hash = ? WHERE id = ?", [passwordHash, tokenRow.user_id]);
-      await run("UPDATE password_reset_tokens SET used_at = datetime('now') WHERE id = ?", [tokenRow.id]);
+      await run("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = ?", [tokenRow.id]);
       await run(
         "DELETE FROM password_reset_tokens WHERE user_id = ? AND id <> ?",
         [tokenRow.user_id, tokenRow.id]
