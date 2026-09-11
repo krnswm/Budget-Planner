@@ -1,13 +1,12 @@
 require("./lib/load-env");
 
 const path = require("path");
-const { execSync } = require("child_process");
 const fs = require("fs");
 const PDFDocument = require("pdfkit");
 const express = require("express");
 const morgan = require("morgan");
 const session = require("express-session");
-const SQLiteStore = require("connect-sqlite3")(session);
+const PgSession = require("connect-pg-simple")(session);
 const { RedisStore } = require("connect-redis");
 const { createClient } = require("redis");
 const bcrypt = require("bcryptjs");
@@ -20,7 +19,7 @@ const csrf = require("csurf");
 // and lib/db.js rewrites `?` placeholders into `$1, $2, ...`, so the route
 // modules did not need re-parameterising. Schema lives in migrations/ and is
 // applied with `npm run migrate`, rather than being mutated at every boot.
-const { run, get, all, transaction, closeDatabase } = require("./lib/db");
+const { run, get, all, transaction, closeDatabase, getPool } = require("./lib/db");
 const registerSpaApiRoutes = require("./routes/register-spa-api-routes");
 const registerAuthRoutes = require("./routes/register-auth-routes");
 const registerReportRoutes = require("./routes/register-report-routes");
@@ -38,7 +37,6 @@ const EXPENSE_CATEGORIES = ["Food", "Travel", "Bills", "Shopping", "Health", "Ed
 const GOOGLE_AUTH_VARS = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_CALLBACK_URL"];
 const GOOGLE_AUTH_SET = GOOGLE_AUTH_VARS.filter((name) => String(process.env[name] || "").trim());
 const GOOGLE_AUTH_ENABLED = GOOGLE_AUTH_SET.length === GOOGLE_AUTH_VARS.length;
-const logsDir = path.join(__dirname, "logs");
 const reactDistDir = path.join(__dirname, "client", "dist");
 const reactIndexFile = path.join(reactDistDir, "index.html");
 
@@ -59,53 +57,23 @@ if (GOOGLE_AUTH_SET.length > 0 && !GOOGLE_AUTH_ENABLED) {
   );
 }
 
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+// Logs go to stdout/stderr, not files. The previous setup appended to
+// logs/access.log and logs/error.log, which fails outright on a read-only
+// serverless filesystem and grew without bound anywhere else. Vercel,
+// systemd, Docker and a plain terminal all capture the standard streams.
+const accessLogStream = { write: (line) => process.stdout.write(line) };
+
+function logError(message) {
+  process.stderr.write(message.endsWith("\n") ? message : `${message}\n`);
 }
 
-const accessLogStream = fs.createWriteStream(path.join(logsDir, "access.log"), { flags: "a" });
-const errorLogStream = fs.createWriteStream(path.join(logsDir, "error.log"), { flags: "a" });
-
-function resolveRedisUrl() {
-  const rawRedisUrl = String(process.env.REDIS_URL || "").trim();
-
-  if (!rawRedisUrl) {
-    return "";
-  }
-
-  const shouldAutoDetectWsl = process.env.REDIS_AUTO_WSL === "true";
-
-  if (!shouldAutoDetectWsl || process.platform !== "win32") {
-    return rawRedisUrl;
-  }
-
-  try {
-    const parsedUrl = new URL(rawRedisUrl);
-    const isLocalRedis = parsedUrl.hostname === "127.0.0.1" || parsedUrl.hostname === "localhost";
-
-    if (!isLocalRedis) {
-      return rawRedisUrl;
-    }
-
-    const wslOutput = execSync("wsl -d Ubuntu -- hostname -I", {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"]
-    }).trim();
-
-    const wslIp = wslOutput.split(/\s+/).find((value) => /^\d+\.\d+\.\d+\.\d+$/.test(value));
-
-    if (!wslIp) {
-      return rawRedisUrl;
-    }
-
-    parsedUrl.hostname = wslIp;
-    return parsedUrl.toString();
-  } catch (error) {
-    return rawRedisUrl;
-  }
-}
-
-const RESOLVED_REDIS_URL = resolveRedisUrl();
+// Redis is optional; without REDIS_URL, sessions live in Postgres.
+//
+// The REDIS_AUTO_WSL branch that used to sit here shelled out to
+// `wsl -d Ubuntu -- hostname -I` via execSync during module load, to guess a
+// WSL IP on Windows. A synchronous subprocess at boot is the wrong thing
+// anywhere, and impossible on serverless. Point REDIS_URL at the right host.
+const RESOLVED_REDIS_URL = String(process.env.REDIS_URL || "").trim();
 const USE_REDIS_SESSIONS = Boolean(RESOLVED_REDIS_URL);
 
 function getCurrentMonthKey() {
@@ -254,7 +222,6 @@ if (USE_REDIS_SESSIONS) {
   });
 
   redisClient.on("error", (error) => {
-    // eslint-disable-next-line no-console
     console.error("Redis session client error:", error.message);
   });
 
@@ -263,9 +230,14 @@ if (USE_REDIS_SESSIONS) {
     prefix: "budget:sess:"
   });
 } else {
-  sessionStore = new SQLiteStore({
-    db: "sessions.db",
-    dir: path.join(__dirname, "db")
+  // Sessions live in Postgres rather than a file. connect-sqlite3 wrote to
+  // db/sessions.db, which cannot work on a read-only serverless filesystem:
+  // logins would appear to succeed and then evaporate.
+  sessionStore = new PgSession({
+    pool: getPool(),
+    tableName: "session",
+    createTableIfMissing: false, // migrations/002 owns this table
+    pruneSessionInterval: 60 * 60 // sweep expired rows hourly
   });
 }
 
@@ -472,7 +444,7 @@ app.use((error, req, res, next) => {
   }
 
   const message = `${new Date().toISOString()} [${req.requestId || "n/a"}] CSRF ${req.method} ${req.originalUrl}\n`;
-  errorLogStream.write(message);
+  logError(message);
 
   res.status(403).send("Your session form is invalid or expired. Please refresh and try again.");
 });
@@ -484,7 +456,7 @@ app.use((error, req, res, next) => {
     error && error.stack ? error.stack : "No stack",
     "---"
   ].join("\n");
-  errorLogStream.write(`${message}\n`);
+  logError(message);
 
   if (res.headersSent) {
     next(error);

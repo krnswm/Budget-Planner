@@ -21,8 +21,8 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "bcryptjs": "^3.0.3",
+    "connect-pg-simple": "^10.0.0",
     "connect-redis": "^9.0.0",
-    "connect-sqlite3": "^0.9.16",
     "csurf": "^1.11.0",
     "dotenv": "^17.4.0",
     "ejs": "^5.0.1",
@@ -33,8 +33,7 @@
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "pdfkit": "^0.18.0",
-    "redis": "^5.11.0",
-    "sqlite3": "^6.0.1"
+    "redis": "^5.11.0"
   },
   "devDependencies": {
     "eslint": "^9.39.5",
