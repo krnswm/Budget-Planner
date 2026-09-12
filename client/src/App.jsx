@@ -331,8 +331,8 @@ function DashboardPage({ apiRequest }) {
 
           <section className="card dashboard-card">
             <div className="section-head">
-              <h2>Recent Expenses</h2>
-              <Link className="ghost" to="/expenses">Manage Expenses</Link>
+              <h2>Recent expenses</h2>
+              <Link className="ghost" to="/expenses">Manage</Link>
             </div>
             <div className="dashboard-card-scroll recent-expenses-scroll">
               {data.expenses.length === 0 ? <p className="subtext">No expenses yet.</p> : (
@@ -352,7 +352,7 @@ function DashboardPage({ apiRequest }) {
           </section>
 
           <section className="card dashboard-card">
-            <h2>Quick Add Expense</h2>
+            <h2>Quick add</h2>
             <div className="dashboard-card-content">
               <form
                 className="stack"
@@ -427,7 +427,7 @@ function BudgetPage({ apiRequest }) {
   return (
     <div className="grid">
       <section className="card card-wide">
-        <h2>Set Monthly Budget</h2>
+        <h2>Set monthly budget</h2>
         <p className="subtext">{data.currentMonthLabel}</p>
         <form
           className="stack"
@@ -465,7 +465,7 @@ function RecentMonthsPage({ apiRequest }) {
   return (
     <div className="grid">
       <section className="card card-wide">
-        <h2>Recent Months</h2>
+        <h2>Recent months</h2>
         {data.history.length === 0 ? <p className="subtext">No history yet.</p> : (
           <ul className="history">
             {data.history.map((month) => (
@@ -531,15 +531,31 @@ function ExpensesPage({ apiRequest }) {
             load(filters);
           }}
         >
-          <input aria-label="Search by label" placeholder="Search label" value={filters.label} onChange={(event) => setFilters((prev) => ({ ...prev, label: event.target.value }))} />
-          <select aria-label="Filter by category" value={filters.category} onChange={(event) => setFilters((prev) => ({ ...prev, category: event.target.value }))}>
-            <option value="">All Categories</option>
-            {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
-          </select>
-          <input type="date" aria-label="Filter from date" value={filters.startDate} onChange={(event) => setFilters((prev) => ({ ...prev, startDate: event.target.value }))} />
-          <input type="date" aria-label="Filter to date" value={filters.endDate} onChange={(event) => setFilters((prev) => ({ ...prev, endDate: event.target.value }))} />
-          <button type="submit">Apply</button>
-          <button type="button" className="btn-ghost" onClick={() => load({ label: "", category: "", startDate: "", endDate: "" })}>Clear</button>
+          {/* Two bare date boxes both reading "dd-mm-yyyy" gave no clue which
+              was the start and which the end. */}
+          <div className="field">
+            <label htmlFor="f-label">Search</label>
+            <input id="f-label" placeholder="Label contains..." value={filters.label} onChange={(event) => setFilters((prev) => ({ ...prev, label: event.target.value }))} />
+          </div>
+          <div className="field">
+            <label htmlFor="f-category">Category</label>
+            <select id="f-category" value={filters.category} onChange={(event) => setFilters((prev) => ({ ...prev, category: event.target.value }))}>
+              <option value="">All categories</option>
+              {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="f-from">From</label>
+            <input id="f-from" type="date" value={filters.startDate} onChange={(event) => setFilters((prev) => ({ ...prev, startDate: event.target.value }))} />
+          </div>
+          <div className="field">
+            <label htmlFor="f-to">To</label>
+            <input id="f-to" type="date" value={filters.endDate} onChange={(event) => setFilters((prev) => ({ ...prev, endDate: event.target.value }))} />
+          </div>
+          <div className="filter-actions">
+            <button type="submit">Apply</button>
+            <button type="button" className="btn-ghost" onClick={() => load({ label: "", category: "", startDate: "", endDate: "" })}>Clear</button>
+          </div>
         </form>
       </section>
 
@@ -703,7 +719,7 @@ function PlanningPage({ apiRequest }) {
   return (
     <div className="grid">
       <section className="card planning-limits">
-        <h2>Category Limits</h2>
+        <h2>Category limits</h2>
         <form
           className="stack"
           onSubmit={async (event) => {
@@ -716,11 +732,19 @@ function PlanningPage({ apiRequest }) {
             await load();
           }}
         >
-          <select aria-label="Category for limit" value={limitForm.category} onChange={(event) => setLimitForm((prev) => ({ ...prev, category: event.target.value }))}>
-            {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
-          </select>
-          <input type="number" min="1" step="0.01" value={limitForm.limitAmount} onChange={(event) => setLimitForm((prev) => ({ ...prev, limitAmount: event.target.value }))} placeholder="Limit amount" aria-label="Limit amount" inputMode="decimal" required />
-          <button type="submit">Save Limit</button>
+          <div className="form-row">
+            <div className="field">
+              <label htmlFor="limit-category">Category</label>
+              <select id="limit-category" value={limitForm.category} onChange={(event) => setLimitForm((prev) => ({ ...prev, category: event.target.value }))}>
+                {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="limit-amount">Monthly limit</label>
+              <input id="limit-amount" type="number" min="1" step="0.01" inputMode="decimal" value={limitForm.limitAmount} onChange={(event) => setLimitForm((prev) => ({ ...prev, limitAmount: event.target.value }))} placeholder="0.00" required />
+            </div>
+          </div>
+          <button type="submit">Save limit</button>
         </form>
         <div className="planning-lists">
           {data.categoryLimits.length > 0 ? (
@@ -791,7 +815,7 @@ function PlanningPage({ apiRequest }) {
       </section>
 
       <section className="card planning-recurring">
-        <h2>Recurring Expenses</h2>
+        <h2>Recurring expenses</h2>
         <form
           className="stack"
           onSubmit={async (event) => {
@@ -810,19 +834,37 @@ function PlanningPage({ apiRequest }) {
             await load();
           }}
         >
-          <input value={recurringForm.label} onChange={(event) => setRecurringForm((prev) => ({ ...prev, label: event.target.value }))} placeholder="Label" aria-label="Label" required />
-          <input type="number" min="0.01" step="0.01" value={recurringForm.amount} onChange={(event) => setRecurringForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="Amount" aria-label="Amount" inputMode="decimal" required />
-          <select value={recurringForm.category} onChange={(event) => setRecurringForm((prev) => ({ ...prev, category: event.target.value }))}>
-            {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
-          </select>
-          <input type="number" min="1" max="31" value={recurringForm.dayOfMonth} onChange={(event) => setRecurringForm((prev) => ({ ...prev, dayOfMonth: event.target.value }))} placeholder="Day of month" required />
-          <input value={recurringForm.note} onChange={(event) => setRecurringForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="Note" aria-label="Note (optional)" />
-          <button type="submit">Add Recurring</button>
+          <div className="field">
+            <label htmlFor="rec-label">What is it for?</label>
+            <input id="rec-label" value={recurringForm.label} onChange={(event) => setRecurringForm((prev) => ({ ...prev, label: event.target.value }))} placeholder="e.g. Rent" required />
+          </div>
+          <div className="form-row">
+            <div className="field">
+              <label htmlFor="rec-amount">Amount</label>
+              <input id="rec-amount" type="number" min="0.01" step="0.01" inputMode="decimal" value={recurringForm.amount} onChange={(event) => setRecurringForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="0.00" required />
+            </div>
+            <div className="field">
+              <label htmlFor="rec-day">Day of month</label>
+              <input id="rec-day" type="number" min="1" max="31" value={recurringForm.dayOfMonth} onChange={(event) => setRecurringForm((prev) => ({ ...prev, dayOfMonth: event.target.value }))} placeholder="1-31" required aria-describedby="rec-day-hint" />
+              <p className="field-hint" id="rec-day-hint">Short months use their last day.</p>
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="rec-category">Category</label>
+            <select id="rec-category" value={recurringForm.category} onChange={(event) => setRecurringForm((prev) => ({ ...prev, category: event.target.value }))}>
+              {data.availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="rec-note">Note <span className="label-optional">optional</span></label>
+            <input id="rec-note" value={recurringForm.note} onChange={(event) => setRecurringForm((prev) => ({ ...prev, note: event.target.value }))} />
+          </div>
+          <button type="submit">Add recurring expense</button>
         </form>
       </section>
 
       <section className="card card-wide">
-        <h2>Recurring List</h2>
+        <h2>Scheduled items</h2>
         {data.recurringExpenses.length === 0 ? <p className="subtext">No recurring items.</p> : (
           <ul className="list">
             {data.recurringExpenses.map((item) => (
@@ -994,7 +1036,7 @@ function InsightsPage({ apiRequest }) {
       </section>
 
       <section className="card insights-categories">
-        <h2>Top Categories</h2>
+        <h2>Top categories</h2>
         {!data.topCategories || data.topCategories.length === 0 ? <p className="subtext">No category data yet.</p> : (
           <ul className="list compact-list">
             {data.topCategories.map((item) => (
@@ -1008,7 +1050,7 @@ function InsightsPage({ apiRequest }) {
       </section>
 
       <section className="card insights-progress">
-        <h2>Category Progress</h2>
+        <h2>Category progress</h2>
         {!data.categoryProgress || data.categoryProgress.length === 0 ? <p className="subtext">No category limits set.</p> : (
           <ul className="list compact-list">
             {data.categoryProgress.map((item) => (
@@ -1025,7 +1067,7 @@ function InsightsPage({ apiRequest }) {
       </section>
 
       <section className="card insights-largest">
-        <h2>Largest Transactions</h2>
+        <h2>Largest transactions</h2>
         {!data.biggestExpenses || data.biggestExpenses.length === 0 ? <p className="subtext">No transactions this month.</p> : (
           <ul className="list">
             {data.biggestExpenses.map((entry) => (
@@ -1073,7 +1115,7 @@ function ReportsPage({ apiRequest }) {
   return (
     <div className="grid">
       <section className="card card-wide">
-        <h2>Report Controls</h2>
+        <h2>Report range</h2>
         <form
           className="filter-grid"
           onSubmit={(event) => {
@@ -1113,7 +1155,7 @@ function ReportsPage({ apiRequest }) {
       </section>
 
       <section className="card reports-breakdown">
-        <h2>Category Breakdown</h2>
+        <h2>Category breakdown</h2>
         {!data.categoryBreakdown || data.categoryBreakdown.length === 0 ? <p className="subtext">No category data in this range.</p> : (
           <ul className="list compact-list">
             {data.categoryBreakdown.map((item) => (
@@ -1127,7 +1169,7 @@ function ReportsPage({ apiRequest }) {
       </section>
 
       <section className="card reports-daily">
-        <h2>Daily Totals</h2>
+        <h2>Daily totals</h2>
         {!data.dailyTotals || data.dailyTotals.length === 0 ? <p className="subtext">No day-wise spend in this range.</p> : (
           <ul className="list compact-list">
             {data.dailyTotals.slice(-10).map((item) => (
@@ -1406,7 +1448,9 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
               ) : (
                 <h2>{displayName}</h2>
               )}
-              <span className="profile-member-inline">Member for {memberDays} days</span>
+              <span className="profile-member-inline">
+                Member for {memberDays} {memberDays === 1 ? "day" : "days"}
+              </span>
             </div>
             {!isEditingName ? (
               <button
@@ -1442,9 +1486,9 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
           }}
         >
           <div className="profile-upload-row">
-            <p className="subtext profile-hint">Save any changes to your profile photo or name.</p>
+            
           </div>
-          <button type="submit">Save Profile Photo</button>
+          <button type="submit">Save changes</button>
         </form>
 
         <form
@@ -1466,30 +1510,39 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
             }
           }}
         >
-          <h3>Change Password</h3>
-          <p className="subtext">Use a strong password with at least 6 characters.</p>
+          <h3>Change password</h3>
           <div className="profile-form-grid">
-            <input
-              type="password"
-              value={passwordForm.currentPassword}
-              onChange={(event) => setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))}
-              placeholder="Current password" aria-label="Current password" autoComplete="current-password"
-              required
-            />
-            <input
-              type="password"
-              value={passwordForm.newPassword}
-              onChange={(event) => setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
-              placeholder="New password" aria-label="New password" autoComplete="new-password"
-              required
-            />
+            <div className="field">
+              <label htmlFor="current-password">Current password</label>
+              <input
+                id="current-password"
+                type="password"
+                value={passwordForm.currentPassword}
+                onChange={(event) => setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))}
+                autoComplete="current-password"
+                required
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="new-password">New password</label>
+              <input
+                id="new-password"
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={(event) => setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
+                autoComplete="new-password"
+                aria-describedby="password-hint"
+                required
+              />
+              <p className="field-hint" id="password-hint">At least 6 characters.</p>
+            </div>
           </div>
-          <button type="submit">Update Password</button>
+          <button type="submit">Update password</button>
         </form>
       </section>
 
       <section className="card profile-card profile-side-card">
-        <h2>Workspace & Security</h2>
+        <h2>Preferences</h2>
         <form
           className="stack profile-form"
           onSubmit={(event) => {
@@ -1503,11 +1556,11 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
           <div className="profile-form-grid">
             <label>
               City
-              <input value={city} onChange={(event) => setCity(event.target.value)} placeholder="City" />
+              <input value={city} onChange={(event) => setCity(event.target.value)} placeholder="e.g. Jaipur" />
             </label>
             <label>
               Money goal
-              <input value={focus} onChange={(event) => setFocus(event.target.value)} placeholder="Current money goal" />
+              <input value={focus} onChange={(event) => setFocus(event.target.value)} placeholder="e.g. Save 20% each month" />
             </label>
           </div>
           <label>
@@ -1518,13 +1571,13 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
               ))}
             </select>
           </label>
-          <button type="submit">Save Preferences</button>
+          <button type="submit">Save preferences</button>
         </form>
 
       </section>
 
       <section className="card card-wide danger-zone profile-delete-card">
-        <h2>Delete Account</h2>
+        <h2>Delete account</h2>
         <p className="subtext">Type DELETE to permanently remove your account and data.</p>
         <form
           className="stack profile-form profile-danger-form"
@@ -1538,7 +1591,7 @@ function ProfilePage({ apiRequest, theme, setTheme }) {
           }}
         >
           <input id="delete-confirm" aria-label="Type DELETE to confirm" placeholder="DELETE" value={deleteText} onChange={(event) => setDeleteText(event.target.value)} required />
-          <button type="submit" className="danger">Delete Account</button>
+          <button type="submit" className="danger">Delete my account</button>
         </form>
       </section>
     </div>

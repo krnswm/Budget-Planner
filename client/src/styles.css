@@ -562,15 +562,28 @@ button[type="submit"],
   transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
 
+/* Size to the label. Inside .stack (a flex column) buttons stretched to the
+   full card width, turning "Save preferences" into a slab as visually heavy
+   as the page's main action. Opt into full width with .btn-block. */
+.stack > button[type="submit"],
+.profile-form > button[type="submit"],
+form > button[type="submit"] {
+  align-self: flex-start;
+}
+
+.btn-block { align-self: stretch !important; width: 100%; }
+
 button[type="submit"]:hover:not(:disabled),
 .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
 
 button[type="submit"]:active:not(:disabled),
 .btn-primary:active:not(:disabled) { transform: translateY(1px); }
 
-/* Anything else gets a neutral reset, so an unclassed button never
-   accidentally inherits the primary treatment. */
-button:not([type="submit"]):not(.btn-primary) {
+/* Reset only genuinely unclassed buttons. Matching every non-submit button
+   here beat .btn-ghost on specificity (0,2,1 vs 0,1,0) and stripped the
+   border and padding off every Edit / Delete / Pause control, leaving them
+   looking like plain text. */
+button:not([type="submit"]):not([class]) {
   background: none;
   border: none;
   color: inherit;
@@ -730,9 +743,24 @@ select {
 
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: var(--s-3);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s-3) var(--s-4);
   align-items: end;
+}
+
+/* Apply and Clear sit together on the baseline, not as two more grid cells
+   competing with the fields for width. */
+.filter-actions {
+  display: flex;
+  gap: var(--s-2);
+  align-items: flex-end;
+}
+
+.filter-actions button { flex: 0 0 auto; }
+
+@media (max-width: 640px) {
+  .filter-actions { grid-column: 1 / -1; }
+  .filter-actions button { flex: 1 1 auto; }
 }
 
 /* ----------------------------------------------------------------- lists -- */
